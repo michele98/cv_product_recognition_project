@@ -3,8 +3,9 @@ Python with Anaconda distribution and jupyter.
 
 Create the conda environment using:
 ```console
-conda env create -f cv_product_recognition.yml
+conda env create -f cv_product_recognition.yml -p <env_path>
 ```
+where ``<env_path>`` is the folder in which conda installs the environments
 
 Add the environment to ipykernel. Do this from the base environment:
 ```console
