@@ -3,7 +3,7 @@ Python with Anaconda distribution and jupyter.
 
 Create the conda environment using:
 ```console
-conda env create -f cv_product_recognition.yml -p <env_path>
+conda env create -f cv_product_recognition.yml -p <env_path/cv_product_recognition>
 ```
 where ``<env_path>`` is the folder in which conda installs the environments
 
