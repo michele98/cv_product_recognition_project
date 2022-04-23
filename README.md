@@ -11,3 +11,5 @@ Add the environment to ipykernel. Do this from the base environment:
 ```console
 python -m ipykernel install --user --name=cv_product_recognition --display-name="Python 3.7 (cv_product_recognition)"
 ```
+
+Create the folder ``images/results`` to display the outputs of the notebook.
