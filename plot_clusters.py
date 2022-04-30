@@ -42,4 +42,4 @@ def plot_clusters(X, y, dim, points,
                 label=points_name)
     plt.legend()
     plt.grid()
-    plt.show()   
+    #plt.show()   
