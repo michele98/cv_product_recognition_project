@@ -119,6 +119,7 @@ class FeatureMatcher():
 class MultipleInstanceMatcher(FeatureMatcher):
 
     _peaks_kw = {'height': 0.3, 'prominence': 0.5}
+    _homographies = [np.eye(3, dtype = np.float32)]
 
     def __init__(self, im1, im2, K = 15, sigma = 4, min_cluster_threshold = 0):
         super().__init__(im1, im2)
@@ -129,7 +130,9 @@ class MultipleInstanceMatcher(FeatureMatcher):
     
     def find_matches(self, force=False):
         super().find_matches(force)
-
+        if len(self._matches) <= 4:
+            print('Model not found! There are less than 4 matches between model and scene images.')
+            return
         self._calculate_r_vectors()
         self._cast_votes()
         self._compute_accumulator()
@@ -142,10 +145,16 @@ class MultipleInstanceMatcher(FeatureMatcher):
         self._K = K
 
     def set_sigma(self, sigma):
-        self._sigma =sigma
+        self._sigma = sigma
     
     def set_peaks_kw(self, **kwargs):
-        self._peaks_kw = dict(**kwargs)
+        if 'distance' in kwargs.keys():
+            s = self.im2.shape[0]*self.im2.shape[1]
+            kwargs['distance'] = kwargs['distance']*s/self._K**2
+        self._peaks_kw = kwargs
+
+    def get_homographies(self):
+        return self._homographies
 
     # other methods
 
@@ -198,7 +207,7 @@ class MultipleInstanceMatcher(FeatureMatcher):
     def _compute_accumulator(self):
         n_bins = self.im2.shape[1]//self._K
         m_bins = self.im2.shape[0]//self._K
-        acc_bin = np.zeros((n_bins, m_bins))
+        acc_bin = np.zeros((n_bins, m_bins), dtype = np.float32)
 
         for pos in self._vote_pos:
             i,j = pos//self._K
@@ -211,22 +220,33 @@ class MultipleInstanceMatcher(FeatureMatcher):
         k = np.ceil(3*self._sigma).astype(int)
         acc_bin = cv2.GaussianBlur(acc_bin, (2*k+1,2*k+1), self._sigma)
 
-        #norm = np.linalg.norm(acc_bin)
         self._acc_bin = acc_bin / np.max(acc_bin)
 
     def _find_accumulator_peaks(self):
 
         x = self._acc_bin.flatten()
 
-        peaks_1d, _ = find_peaks(x, height=0.3, prominence=0.5, distance = 0.2*self._acc_bin.shape[1]*self._acc_bin.shape[0])
+        peaks_1d, _ = find_peaks(x, **self._peaks_kw)
 
         peaks = np.vstack(np.unravel_index(peaks_1d, self._acc_bin.shape))*self._K
         self._peaks = peaks.T
 
     def _assign_keypoints_label(self):
-        #initialize array of distances. First axis for the peak, second axis for the keypoint
-        #so the shape is (num_peaks, num_keypoints) 
-        distances = np.zeros((self._peaks.shape[0], self._vote_pos.shape[0], ))
+        n_votes = self._vote_pos.shape[0]
+        n_peaks = self._peaks.shape[0]
+
+        # initialize array of predicted labels
+        predicted_labels = np.zeros(n_votes)
+
+        # return if there are no found peaks or just 1,
+        # as all matching points should belong to the same instance
+        if n_peaks == 0 or n_peaks == 1:
+            self._predicted_labels = predicted_labels
+            return
+
+        # initialize and compute matrix of distances between peaks and votes.
+        # First axis for the peak, second axis for the keypoint
+        distances = np.zeros((n_peaks, n_votes, ))
 
         for i, peak in enumerate(self._peaks):
             distances[i] = np.linalg.norm(self._vote_pos - peak.T, axis = 1)
@@ -235,8 +255,9 @@ class MultipleInstanceMatcher(FeatureMatcher):
 
     def _find_homographies(self):
 
-        Homographies = []
+        homographies = []
 
+        #print(np.unique(self._predicted_labels))
         for label in np.unique(self._predicted_labels):
             label_mask = self._predicted_labels==label
             votes = self._vote_pos[label_mask]
@@ -245,6 +266,11 @@ class MultipleInstanceMatcher(FeatureMatcher):
             kp_model_filtered = self._kp_model_pos[label_mask]
             kp_scene_filtered = self._kp_scene_pos[label_mask]
 
+            # impossible to compute homography with less than 4 points
+            if len(kp_model_filtered) < 4: continue
+
             M, mask = cv2.findHomography(kp_model_filtered, kp_scene_filtered, cv2.RANSAC, 1.)
-            Homographies.append(M)
-        self._Homographies = Homographies
+            if M is None: continue
+            homographies.append(M)
+        #print(f'Found {len(homographies)} homographies')
+        self._homographies = homographies
