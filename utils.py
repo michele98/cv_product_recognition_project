@@ -12,7 +12,7 @@ class FeatureMatcher():
     _kp2, _des2 = [], []
     _matches = []
     _match_distance_threshold = 0.7
-    _homography = np.zeros((3,3))
+    _homography = np.eye(3)
     _homography_mask = []
     
     # Constructor, initialize the sift, model and scene
@@ -109,12 +109,10 @@ class FeatureMatcher():
     def _find_homography(self):
         src_pts = np.float32([self._kp1[m.queryIdx].pt for m in self._matches])
         dst_pts = np.float32([self._kp2[m.trainIdx].pt for m in self._matches])
-        
-        M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-        
-        self._homography = M
-        self._homography_mask = mask.ravel().tolist()
 
+        if len(src_pts)>=4:
+            self._homography, self._homography_mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+        
 
 class MultipleInstanceMatcher(FeatureMatcher):
 
@@ -154,7 +152,7 @@ class MultipleInstanceMatcher(FeatureMatcher):
         self._peaks_kw = kwargs
 
     def get_homographies(self):
-        return self._homographies
+        return self._homographies, self._used_kp
 
     # other methods
 
@@ -256,6 +254,7 @@ class MultipleInstanceMatcher(FeatureMatcher):
     def _find_homographies(self):
 
         homographies = []
+        used_kp = []
 
         #print(np.unique(self._predicted_labels))
         for label in np.unique(self._predicted_labels):
@@ -272,5 +271,7 @@ class MultipleInstanceMatcher(FeatureMatcher):
             M, mask = cv2.findHomography(kp_model_filtered, kp_scene_filtered, cv2.RANSAC, 1.)
             if M is None: continue
             homographies.append(M)
+            used_kp.append(len(kp_model_filtered[mask]))
         #print(f'Found {len(homographies)} homographies')
         self._homographies = homographies
+        self._used_kp = used_kp
