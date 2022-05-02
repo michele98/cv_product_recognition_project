@@ -2,6 +2,30 @@ import numpy as np
 import cv2
 from scipy.signal import find_peaks
 
+def valid_bbox(bbox, d = 0.25):
+    '''
+    Function to assess if the bounding box is valid
+    @param d: distortion parameter, default is 4.
+            Measures the threshold for the ratio between the mean of opposing edges and their standard deviation.
+    '''
+    #edges
+    l1 = np.linalg.norm(bbox[0] - bbox[1])
+    l2 = np.linalg.norm(bbox[1] - bbox[2])
+    l3 = np.linalg.norm(bbox[2] - bbox[3])
+    l4 = np.linalg.norm(bbox[3] - bbox[0])
+
+    #diagonals
+    d1 = np.linalg.norm(bbox[0] - bbox[2])
+    d2 = np.linalg.norm(bbox[1] - bbox[3])
+
+    vert = [l1, l3]
+    hor = [l2, l4]
+    edges = [l1,l2,l3,l4]
+    diagonals = [d1, d2]
+
+    #first part takes care of crossing, second part of excessive distortion
+    return np.mean(diagonals)>=np.mean(edges) and d*np.std(hor)<=np.mean(hor) and d*np.std(vert)<=np.mean(vert)
+
 # Used to compute the matches between two images using local invariant features
 class FeatureMatcher():
     
