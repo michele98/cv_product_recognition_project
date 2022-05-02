@@ -118,6 +118,7 @@ class MultipleInstanceMatcher(FeatureMatcher):
 
     _peaks_kw = {'height': 0.3, 'prominence': 0.5}
     _homographies = [np.eye(3, dtype = np.float32)]
+    _used_kp = [0]
 
     def __init__(self, im1, im2, K = 15, sigma = 4, min_cluster_threshold = 0):
         super().__init__(im1, im2)
