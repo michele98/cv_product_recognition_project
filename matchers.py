@@ -11,7 +11,7 @@ class FeatureMatcher():
     _kp1, _des1 = [], []
     _kp2, _des2 = [], []
     _matches = []
-    _match_distance_threshold = 0.7
+    _homography_parameters = {'match_distance_threshold': 0.7, 'ransacReprojThreshold': 1.}
     _homography = np.eye(3)
     _homography_mask = []
     
@@ -25,9 +25,19 @@ class FeatureMatcher():
     # Set methods
 
     def set_match_distance_threshold(self, threshold):
-        self._match_distance_threshold = threshold
+        self._homography_parameters['match_distance_threshold'] = threshold
     
+    def set_ransac_reproj_threshold(self, threshold):
+        self._homography_parameters['ransac_reproj_threshold'] = threshold
     
+    def set_homography_parameters(self, **kwargs):
+        for key in kwargs.keys():
+            if key not in self._homography_parameters.keys():
+                raise KeyError(f'Unknown parameter {k}. The possible homography parameters are: match_distance_threshold and ransacReprojThreshold.')
+
+        for key, value in kwargs.items():
+            self._homography_parameters[key] = value
+
     # Sets keypoints and descriptors for image 1
     def set_descriptors_1(self, kp, des):
         self._kp1 = kp
@@ -99,7 +109,7 @@ class FeatureMatcher():
         
         #compute the best 2 matches for each salient point in the query image
         matches = flann.knnMatch(self._des1, self._des2, k=2)
-        d = self._match_distance_threshold
+        d = self._homography_parameters['match_distance_threshold']
         #if the distance between the best matches is less than d times the distance from the second best matches, keep the match
         #otherwise it is probably a false match that needs to be discarded
         self._matches = [m for m,n in matches if m.distance < d*n.distance]
@@ -111,8 +121,10 @@ class FeatureMatcher():
         src_pts = np.float32([self._kp1[m.queryIdx].pt for m in self._matches])
         dst_pts = np.float32([self._kp2[m.trainIdx].pt for m in self._matches])
 
+        reproj_th = self._homography_parameters['ransacReprojThreshold']
+
         if len(src_pts)>=4:
-            homography, homography_mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+            homography, homography_mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, reproj_th)
             if not homography is None:
                 self._homography = homography
                 self._homography_mask = homography_mask
@@ -260,6 +272,7 @@ class MultipleInstanceMatcher(FeatureMatcher):
 
         homographies = []
         used_kp = []
+        reproj_th = self._homography_parameters['ransacReprojThreshold']
 
         #print(np.unique(self._predicted_labels))
         for label in np.unique(self._predicted_labels):
@@ -273,7 +286,7 @@ class MultipleInstanceMatcher(FeatureMatcher):
             # impossible to compute homography with less than 4 points
             if len(kp_model_filtered) < 4: continue
 
-            M, mask = cv2.findHomography(kp_model_filtered, kp_scene_filtered, cv2.RANSAC, 1.)
+            M, mask = cv2.findHomography(kp_model_filtered, kp_scene_filtered, cv2.RANSAC, reproj_th)
             if M is None: continue
             homographies.append(M)
             used_kp.append(len(kp_model_filtered[mask]))
