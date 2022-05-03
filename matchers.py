@@ -146,7 +146,7 @@ class MultipleInstanceMatcher(FeatureMatcher):
     def find_matches(self, force=False):
         super().find_matches(force)
         if len(self._matches) <= 4:
-            print('Model not found! There are less than 4 matches between model and scene images.')
+            #print('Model not found! There are less than 4 matches between model and scene images.')
             return
         self._calculate_r_vectors()
         self._cast_votes()
