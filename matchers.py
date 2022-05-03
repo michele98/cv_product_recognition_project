@@ -33,7 +33,7 @@ class FeatureMatcher():
     def set_homography_parameters(self, **kwargs):
         for key in kwargs.keys():
             if key not in self._homography_parameters.keys():
-                raise KeyError(f'Unknown parameter {k}. The possible homography parameters are: match_distance_threshold and ransacReprojThreshold.')
+                raise KeyError(f'Unknown parameter {key}. The possible homography parameters are: match_distance_threshold and ransacReprojThreshold.')
 
         for key, value in kwargs.items():
             self._homography_parameters[key] = value
