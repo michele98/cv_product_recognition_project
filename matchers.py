@@ -132,14 +132,13 @@ class FeatureMatcher():
 
 class MultipleInstanceMatcher(FeatureMatcher):
 
-    _peaks_kw = {'height': 0.3, 'prominence': 0.5}
+    _peaks_kw = {'height': 0.3}
     _homographies = [np.eye(3, dtype = np.float32)]
     _used_kp = [0]
 
-    def __init__(self, im1, im2, K = 15, sigma = 4, min_cluster_threshold = 0):
+    def __init__(self, im1, im2, K = 15, min_cluster_threshold = 0):
         super().__init__(im1, im2)
         self._K = K
-        self._sigma = sigma
         self._peaks_kw['distance'] = 0.2*im2.shape[1]*im2.shape[0]/K**2
         self._min_cluster_threshold = min_cluster_threshold
     
@@ -158,9 +157,6 @@ class MultipleInstanceMatcher(FeatureMatcher):
     # set methods
     def set_K(self, K):
         self._K = K
-
-    def set_sigma(self, sigma):
-        self._sigma = sigma
     
     def set_peaks_kw(self, **kwargs):
         if 'distance' in kwargs.keys():
@@ -231,9 +227,6 @@ class MultipleInstanceMatcher(FeatureMatcher):
             if i>=n_bins or j>=m_bins or i<0 or j<0: continue
 
             acc_bin[i,j]+=1
-
-        k = np.ceil(3*self._sigma).astype(int)
-        acc_bin = cv2.GaussianBlur(acc_bin, (2*k+1,2*k+1), self._sigma)
 
         self._acc_bin = acc_bin / np.max(acc_bin)
 

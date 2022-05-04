@@ -25,7 +25,6 @@ def get_bbox_edges(bbox):
     
     return l1, l2, l3, l4
 
-
 def get_bbox_diagonals(bbox):
     
     d1 = np.linalg.norm(bbox[0] - bbox[2])
@@ -64,7 +63,7 @@ def valid_bbox(bbox, edges_ratio = 4, diag_ratio = 2):
             edges_ratio*np.std(vert) <= np.mean(vert) and 
             diag_ratio*np.std(diagonals) <= np.mean(diagonals))
 
-def find_matcher_matrix(im_scene_list, im_model_list, multiple_instances=True, K=15, sigma=4., peaks_kw={}, homography_kw={}):
+def find_matcher_matrix(im_scene_list, im_model_list, multiple_instances=True, K=15, peaks_kw={}, homography_kw={}):
     '''Computes the matrix of ``matcher.FeatureMatcher`` between each scene image and model image
 
     Parameters
@@ -78,9 +77,6 @@ def find_matcher_matrix(im_scene_list, im_model_list, multiple_instances=True, K
     K: int, default 15
         binning dimension in pixel of the accumulator array for the barycenter votes in the GHT.
         The minimum value is 1. Used only if ``multiple_instances`` is set to True.
-    sigma: float, default 4
-        width in number of bins for the gaussian smoothing of the accumulator array.
-        If ``sigma`` is set to 0, no smoothing is performed. Used only if ``multiple_instances`` is set to True.
     peaks_kw:
         keyword arguments passed to ``scipy.find_peaks`` for finding the peaks in the GHT accumulator.
         Used only if ``multiple_instances`` is set to True.
@@ -107,7 +103,6 @@ def find_matcher_matrix(im_scene_list, im_model_list, multiple_instances=True, K
             if multiple_instances:
                 matcher = MultipleInstanceMatcher(im_model, im_scene)
                 matcher.set_K(K)
-                matcher.set_sigma(sigma)
                 matcher.set_peaks_kw(**peaks_kw)
             else:
                 matcher = FeatureMatcher(im_model, im_scene)
