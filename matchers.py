@@ -186,7 +186,7 @@ class MultipleInstanceMatcher(FeatureMatcher):
 
         kp_model_angle = np.asarray([k.angle for k in kp_model])
         kp_scene_angle = np.asarray([k.angle for k in kp_scene])
-        self._theta = kp_scene_angle - kp_model_angle
+        self._theta = (kp_scene_angle - kp_model_angle) * np.pi / 180
 
         kp_model_size = np.asarray([k.size for k in kp_model])
         kp_scene_size = np.asarray([k.size for k in kp_scene])
