@@ -1,4 +1,3 @@
-from msilib.schema import Feature
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
@@ -17,22 +16,42 @@ class Colors:
     WHITE = (255, 255, 255)
     GRAY = (127, 127, 127)
 
-
-def valid_bbox(bbox, d = 0.25):
-    '''
-    Function to assess if the bounding box is valid
-    @param d: distortion parameter, default is 4.
-            Measures the threshold for the ratio between the mean of opposing edges and their standard deviation.
-    '''
-    # edges
+def get_bbox_edges(bbox):
+    
     l1 = np.linalg.norm(bbox[0] - bbox[1])
     l2 = np.linalg.norm(bbox[1] - bbox[2])
     l3 = np.linalg.norm(bbox[2] - bbox[3])
     l4 = np.linalg.norm(bbox[3] - bbox[0])
+    
+    return l1, l2, l3, l4
 
-    # diagonals
+
+def get_bbox_diagonals(bbox):
+    
     d1 = np.linalg.norm(bbox[0] - bbox[2])
     d2 = np.linalg.norm(bbox[1] - bbox[3])
+    
+    return d1, d2
+
+def valid_bbox(bbox, edges_ratio = 4, diag_ratio = 2):
+    '''
+    Function to assess if the bounding box is valid
+    Parameters
+    ----------
+    edges_ratio: float, default 4 
+        edge distortion parameter: measures the threshold for the ratio between the mean of opposing edges and their standard deviation.
+    diag_ratio: float, default 2
+        diagonal distortion parameter: measures the threshold for the ratio between the mean of the diagonals and their standard deviation.
+    Returns
+    -------
+    bool
+    '''
+    
+    # edges
+    l1, l2, l3, l4 = get_bbox_edges(bbox)
+
+    # diagonals
+    d1, d2 = get_bbox_diagonals(bbox)
 
     vert = [l1, l3]
     hor = [l2, l4]
@@ -40,7 +59,10 @@ def valid_bbox(bbox, d = 0.25):
     diagonals = [d1, d2]
 
     # first part takes care of crossing, second part of excessive distortion
-    return np.mean(diagonals)>=np.mean(edges) and d*np.std(hor)<=np.mean(hor) and d*np.std(vert)<=np.mean(vert)
+    return (np.mean(diagonals) >= np.mean(edges) and 
+            edges_ratio*np.std(hor) <= np.mean(hor) and
+            edges_ratio*np.std(vert) <= np.mean(vert) and 
+            diag_ratio*np.std(diagonals) <= np.mean(diagonals))
 
 def find_matcher_matrix(im_scene_list, im_model_list, multiple_instances=True, K=15, sigma=4., peaks_kw={}, homography_kw={}):
     '''Computes the matrix of ``matcher.FeatureMatcher`` between each scene image and model image
@@ -70,6 +92,7 @@ def find_matcher_matrix(im_scene_list, im_model_list, multiple_instances=True, K
     2D array of shape(n_scenes, n_models) of ``matcher.FeatureMatcher`` if ``multiple_instances`` is set to False
     or ``matcher.MultipleInstacneMatcher`` if ``multiple_instances`` is set to True.
     '''
+    
     # Find salient points of the images and corresponding descriptors
     sift = cv2.xfeatures2d.SIFT_create()
     kp_scene_list, des_scene_list = sift.compute(im_scene_list, sift.detect(im_scene_list))
@@ -108,6 +131,7 @@ def visualize_detections(matcher_matrix,
                         annotate = True,
                         annotation_offset = 30,
                         show_matches = False):
+    
     '''Visualize the detected models with annotated bounding boxes on the scene images.
     
     Parameters
@@ -150,6 +174,7 @@ def visualize_detections(matcher_matrix,
     TypeError
         if the elements in ``matcher_matrix`` are not instances of ``matcher.FeatureMatcher``
     '''
+    
     n_scenes, n_models = matcher_matrix.shape
 
     if scene_filenames is None:
@@ -233,7 +258,6 @@ def visualize_detections(matcher_matrix,
                 if not high_kp and (d==2 or d==3):
                     im_scene = cv2.polylines(im_scene, [np.int32(dst)], True, Colors.RED, 10, cv2.FILLED)
                 
-                # draw bounding box on scene image
 
             # save centers
             centers_list.append(centers)
@@ -265,3 +289,66 @@ def visualize_detections(matcher_matrix,
 
     fig.tight_layout(pad = 1.5)
     return fig, axs
+
+
+def print_detections(matcher_matrix, scene_filenames=None, model_filenames=None, min_match_threshold=15, max_distortion=4):
+    
+    n_scenes, n_models = matcher_matrix.shape
+    
+    if scene_filenames is None:
+        scene_filenames = range(n_scenes)
+
+    if model_filenames is None:
+        model_filenames = range(n_models)
+    
+    for i, line in enumerate(matcher_matrix):
+        print(f"\nScene: {scene_filenames[i]}")
+        
+        for j, matcher in enumerate(line):
+            
+            im_model = matcher_matrix[i][j].im1
+
+            # find the corners of the model
+            h, w = im_model.shape[0], im_model.shape[1]
+            pts = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
+            
+            # differentiate between MultipleInstanceMatcher and FeatureMatcher
+            if isinstance(matcher, MultipleInstanceMatcher):
+                M, used_kp = matcher.get_homographies()
+            elif isinstance(matcher, FeatureMatcher):
+                M, _ = matcher.get_homography()
+                M = [M]
+                used_kp = [len(matcher.get_matches())]
+            else:
+                raise TypeError(
+                    "Matcher must be an instance of matcher.FeatureMatcher")
+            
+            positions = []
+            
+            for M, used_kp in zip(M, used_kp):
+                # Project the corners of the model onto the scene image
+                dst = cv2.perspectiveTransform(pts, M)
+
+                high_kp = used_kp >= min_match_threshold
+                undistorted = valid_bbox(dst, max_distortion)
+
+                # Set bounding box parameters
+                # normal bounding box
+                if high_kp and undistorted:
+                    
+                    l1, l2, l3, l4 = get_bbox_edges(dst)
+                    
+                    positions.append({
+                        'c' : cv2.perspectiveTransform(np.float32([[[w//2, h//2]]]), M).ravel(),
+                        'w' : np.mean([l2, l4]),
+                        'h' : np.mean([l1, l3])
+                        }
+                    )
+                    
+            if len(positions) > 0:
+                print(f'\tProduct {model_filenames[j]} - {len(positions)} instance found:')
+                for k, pos in enumerate(positions):
+                    print(
+                        f"\t\tInstance  {k + 1} (position: ({pos['c'][0]:.0f}, {pos['c'][1]:.0f}), width: {pos['w']:.0f}px, height: {pos['h']:.0f}px)")
+            
+    return None
