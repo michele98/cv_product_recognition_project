@@ -445,6 +445,7 @@ def print_detections(bbox_props):
             )
 
         if len(positions) > 0:
+            model_name = model_name.split('.')[0]
             print(f'\tProduct {model_name} - {counter} instance found:')
             for k, pos in enumerate(positions):
                 print(
