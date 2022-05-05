@@ -313,7 +313,8 @@ def visualize_detections(im_scene,
                          annotate=True,
                          annotation_offset=30,
                          show_matches=False,
-                         ax = None):
+                         ax = None,
+                         axes_off = False):
     '''Visualize the detected models with annotated bounding boxes on the scene images.
 
     Parameters
@@ -338,6 +339,8 @@ def visualize_detections(im_scene,
         print match number alongside model name
     ax: ``matplotlib.axes._subplots.AxesSubplot``, optional
         the axes on which to show the plot
+    axes_off: bool, default False
+        toggles axes ticks on plot
 
     Returns
     -------
@@ -406,8 +409,8 @@ def visualize_detections(im_scene,
             else:
                 ann = model_name
             ax.annotate(ann, center-np.array([a, 0]), color='k', fontweight='bold', fontsize=10)
-
-    ax.set_axis_off()
+    if axes_off:
+        ax.set_axis_off()
     
     if create_axes:
         fig.tight_layout(pad=1.5)
