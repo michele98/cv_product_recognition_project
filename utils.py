@@ -303,13 +303,9 @@ def get_overlap(bbox, bbox2):
 
     return inters.area / min(p1.area, p2.area)
 
-def visualize_detections(matcher_matrix,
+def visualize_detections(im_scene_list,
+                         bbox_props_container,
                          scene_filenames=None,
-                         model_filenames=None,
-                         min_match_threshold=15,
-                         max_distortion=4,
-                         color_distace_threshold=5,
-                         bbox_overlap=0.8,
                          draw_invalid_bbox=0,
                          dimension=1000,
                          vertical_layout=True,
@@ -320,26 +316,17 @@ def visualize_detections(matcher_matrix,
 
     Parameters
     ----------
-    matcher_matrix: 2D array or array-like
-        array of ``matchers.FeatureMatcher`` of shape (n_scenes, n_models).
+    im_scene_list: array or array-like
+        list of scene images
+    bbox_props_container:
+        list containing the properties of the bounding boxes for each scene image
     scene_filenames: array or array-like, optional
         array of filenames of the scene images, used for visualization.
-    model_filenames: array or array-like, optional
-        array of filenames of the model images, used for visualization.
-    min_match_threshold: int, default 15
-        minimum number of matches to consider a bounding box as valid.
-    max_distortion: int, default 4
-        maximum distortion parameter as defined in ``valid_bbox`` to consider a bounding box as valid.
-    color_distance_threshold: float, default 5
-        average color distance in HSV space to filter false positive bounding boxes
-    bbox_overlap: float, default 0.8
-        ratio of the area of the intersection between 2 bounding boxes and the smallest of the 2 bounding boxes.
-        Used for the filtering of overlapping bounding boxes.
     draw_invalid_bbox: int, default 0
         possible values:
             0: draw only valid bounding boxes
-            1: draw valid bboxes and distorted bboxes with at least ``min_match_threshold`` matches
-            2: draw valid bboxes and undistorted bboxes with less than ``min_match_threshold`` matches
+            1: draw valid bboxes and bounding boxes filtered by shape and color with enough matches
+            2: draw valid bboxes and bounding boxes with the right shape and color with not enough matches
             3: draw all bounding boxes.
     dimension: int, default 1000
         plot dimension in pixels.
@@ -364,19 +351,16 @@ def visualize_detections(matcher_matrix,
         if the elements in ``matcher_matrix`` are not instances of ``matcher.FeatureMatcher``
     '''
 
-    n_scenes, n_models = matcher_matrix.shape
+    n_scenes = len(im_scene_list)
 
     if scene_filenames is None:
         scene_filenames = range(n_scenes)
 
-    if model_filenames is None:
-        model_filenames = range(n_models)
-
     d = draw_invalid_bbox
 
     # width and height like the first scene image
-    height = matcher_matrix[0][0].im2.shape[0]
-    width = matcher_matrix[0][0].im2.shape[1]
+    height = im_scene_list[0].shape[0]
+    width = im_scene_list[0].shape[1]
 
     if vertical_layout:
         w = dimension
@@ -394,91 +378,57 @@ def visualize_detections(matcher_matrix,
     if n_scenes == 1:
         axs = [axs]
 
-    for i, line in enumerate(matcher_matrix):
-        im_scene = np.copy(matcher_matrix[i][0].im2)
+    for ax, im, bbox_props_list in zip(axs, im_scene_list, bbox_props_container):
+        im_scene = np.copy(im)
         im1 = np.zeros_like(im_scene)  # for overlay with filled bounding boxes
 
-        # to keep track of center positions and match number for annotations
         centers_list = []
         matches_list = []
 
-        for j, matcher in enumerate(line):
-            im_model = np.copy(matcher_matrix[i][j].im1)
+        for bbox_props in bbox_props_list:
+            centers = []
+            matches = []
 
-            # find the corners of the model
-            h, w = im_model.shape[0], im_model.shape[1]
-            pts = np.float32([[0, 0], [0, h-1], [w-1, h-1],
-                              [w-1, 0]]).reshape(-1, 1, 2)
+            bbox = bbox_props['corners']
 
-            centers = []  # centers of the bounding boxes for the current model
-            matches = []  # matches used for the bounding boxes for the current model
+            if bbox_props['valid_bbox']:
+                color = Colors.GREEN
+                width = 15
+                centers.append(bbox_props['center'])
+                matches.append(bbox_props['match_number'])
+                # fill bounding box
+                im1 = cv2.fillPoly(im1, [np.int32(bbox)], color, cv2.LINE_8)
+                im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, Colors.GREEN, 15, cv2.FILLED)
 
-            # differentiate between MultipleInstanceMatcher and FeatureMatcher
-            if isinstance(matcher, MultipleInstanceMatcher):
-                M, used_kp = matcher.get_homographies()
-            elif isinstance(matcher, FeatureMatcher):
-                M, _ = matcher.get_homography()
-                M = [M]
-                used_kp = [len(matcher.get_matches())]
             else:
-                raise TypeError(
-                    "Matcher must be an instance of matcher.FeatureMatcher")
-
-            for M, used_kp in zip(M, used_kp):
-                # Project the corners of the model onto the scene image
-                dst = cv2.perspectiveTransform(pts, M)
-
-                high_kp = used_kp >= min_match_threshold
-                true_positive = valid(
-                    im_model, im_scene, dst, color_distace_threshold, max_distortion)
-
-                # Set bounding box parameters
-                # normal bounding box
-                if high_kp and true_positive:
-                    color = Colors.GREEN
-                    width = 15
-                    # fill bounding box
-                    centers.append(cv2.perspectiveTransform(
-                        np.float32([[[w//2, h//2]]]), M).ravel())
-                    matches.append(used_kp)
-                    im1 = cv2.fillPoly(im1, [np.int32(dst)], color, cv2.LINE_8)
-                    im_scene = cv2.polylines(
-                        im_scene, [np.int32(dst)], True, Colors.GREEN, 15, cv2.FILLED)
-
                 # distorted bounding box with high number of matches
-                if high_kp and not true_positive and (d == 1 or d == 3):
-                    im_scene = cv2.polylines(
-                        im_scene, [np.int32(dst)], True, Colors.ORANGE, 10, cv2.FILLED)
+                if bbox_props['sufficient_matches'] and not bbox_props['valid_shape'] and (d == 1 or d == 3):
+                    im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, Colors.ORANGE, 10, cv2.FILLED)
 
                 # bounding box with low number of matches
-                if not high_kp and (d == 2 or d == 3):
-                    im_scene = cv2.polylines(
-                        im_scene, [np.int32(dst)], True, Colors.RED, 10, cv2.FILLED)
+                if not bbox_props['sufficient_matches'] and (d == 2 or d == 3):
+                    im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, Colors.RED, 10, cv2.FILLED)
 
-            # save centers
             centers_list.append(centers)
             matches_list.append(matches)
-
         # display scene image
-        axs[i].imshow(im_scene)
-        axs[i].imshow(im1, alpha=0.3)
+        ax.imshow(im_scene)
+        ax.imshow(im1, alpha=0.3)
 
         if annotate:
             # put annotations for model filenames
-            for (model_filename, centers, matches) in zip(model_filenames, centers_list, matches_list):
-                if type(model_filename) == str:
-                    model_number = model_filename.split('.')[0]
-                else:
-                    model_number = model_filename
+            for bbox_props in bbox_props_list:
+                if not bbox_props['valid_bbox']: continue
+                model_name = bbox_props['model']
+                match_number = bbox_props['match_number']
+                center = bbox_props['center']
 
-                for center, match_number in zip(centers, matches):
-                    a = annotation_offset
-                    if show_matches:
-                        ann = f"{model_number}: {match_number} m."
-                    else:
-                        ann = model_number
-                    axs[i].annotate(ann, center-np.array([a, 0]),
-                                    color='k', fontweight='bold', fontsize=10)
+                a = annotation_offset
+                if show_matches:
+                    ann = f"{model_name}: {match_number} m."
+                else:
+                    ann = model_name
+                ax.annotate(ann, center-np.array([a, 0]), color='k', fontweight='bold', fontsize=10)
 
     for scene_filename, ax in zip(scene_filenames, axs.ravel()):
         if annotate:
@@ -488,76 +438,15 @@ def visualize_detections(matcher_matrix,
     fig.tight_layout(pad=1.5)
     return fig, axs
 
-    
 
 
-def print_detections(matcher_matrix,
-                     scene_filenames=None,
-                     model_filenames=None,
-                     color_distace_threshold=5,
-                     min_match_threshold=15,
-                     max_distortion=4):
+'''
 
-    n_scenes, n_models = matcher_matrix.shape
+def print_detections(name_model,n_instance, name_scene):
 
-    if scene_filenames is None:
-        scene_filenames = range(n_scenes)
-
-    if model_filenames is None:
-        model_filenames = range(n_models)
-
-    for i, line in enumerate(matcher_matrix):
-        im_scene = matcher_matrix[i][0].im2
-        print(f"\nScene: {scene_filenames[i]}")
-
-        for j, matcher in enumerate(line):
-
-            im_model = matcher_matrix[i][j].im1
-
-            # find the corners of the model
-            h, w = im_model.shape[0], im_model.shape[1]
-            pts = np.float32([[0, 0], [0, h-1], [w-1, h-1],
-                              [w-1, 0]]).reshape(-1, 1, 2)
-
-            # differentiate between MultipleInstanceMatcher and FeatureMatcher
-            if isinstance(matcher, MultipleInstanceMatcher):
-                M, used_kp = matcher.get_homographies()
-            elif isinstance(matcher, FeatureMatcher):
-                M, _ = matcher.get_homography()
-                M = [M]
-                used_kp = [len(matcher.get_matches())]
-            else:
-                raise TypeError(
-                    "Matcher must be an instance of matcher.FeatureMatcher")
-
-            positions = []
-
-            for M, used_kp in zip(M, used_kp):
-                # Project the corners of the model onto the scene image
-                dst = cv2.perspectiveTransform(pts, M)
-
-                high_kp = used_kp >= min_match_threshold
-                true_positive = valid(
-                    im_model, im_scene, dst, color_distace_threshold, max_distortion)
-
-                # Set bounding box parameters
-                # normal bounding box
-                if high_kp and true_positive:
-
-                    l1, l2, l3, l4 = get_bbox_edges(dst)
-
-                    positions.append({
-                        'c': cv2.perspectiveTransform(np.float32([[[w//2, h//2]]]), M).ravel(),
-                        'w': np.mean([l2, l4]),
-                        'h': np.mean([l1, l3])
-                    }
-                    )
-
-            if len(positions) > 0:
-                print(
-                    f'\tProduct {model_filenames[j]} - {len(positions)} instance found:')
-                for k, pos in enumerate(positions):
-                    print(
-                        f"\t\tInstance  {k + 1} (position: ({pos['c'][0]:.0f}, {pos['c'][1]:.0f}), width: {pos['w']:.0f}px, height: {pos['h']:.0f}px)")
+            print(f'\tProduct {name_model} - {n_instance} instance found:')
+            for k, pos in enumerate():
+                print(f"\t\tInstance  {k + 1} (position: ({pos['c'][0]:.0f}, {pos['c'][1]:.0f}), width: {pos['w']:.0f}px, height: {pos['h']:.0f}px)")
 
     return None
+'''
