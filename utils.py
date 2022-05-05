@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import cv2
 from matchers import FeatureMatcher, MultipleInstanceMatcher
 
+
 class Colors:
     # RGB values setting for colors
     RED = (255, 40, 30)
@@ -17,71 +18,64 @@ class Colors:
     GRAY = (127, 127, 127)
 
 
-def valid(im_model, im_scene, bbox, color_distace_threshold=5, edges_ratio=4, diag_ratio=2):
-    im_scene_crop = crop_scene(im_scene, bbox)
-    
-    return (valid_bbox(bbox, edges_ratio, diag_ratio) and 
-            color_distance(im_model, im_scene_crop) <= color_distace_threshold)
-    
 def crop_scene(im_scene, bbox):
-    # bbox.astype(np.int32)
-    
-    a = bbox[0][0][0].astype(np.int32)
-    b = bbox[3][0][0].astype(np.int32)
-    c = bbox[0][0][1].astype(np.int32)
-    d = bbox[1][0][1].astype(np.int32)
-    
-    if a < 0:
-        a = 0
-    if b < 0:
-        b = 0
-    if c < 0:
-        c = 0
-    if d < 0:
-        d = 0
-    
+    bbox_int = bbox.astype(np.int32).reshape((bbox.shape[0], 2))
+    bbox_int[bbox_int < 0] = 0
+
+    a = bbox_int[0, 0]
+    b = bbox_int[3, 0]
+    c = bbox_int[0, 1]
+    d = bbox_int[1, 1]
+
     return im_scene[c:d, a:b]
 
 
 def get_dominant_color_hsv(im):
-    
-    ## TODO: docstring (im rgb)
-    
+    '''returns the dominant color in HSV space of and RGB image 
+    '''
+
     c = np.mean(im, axis=(0, 1)).astype(np.uint8)
-    c = cv2.cvtColor(c.reshape(1,1,3), cv2.COLOR_RGB2HSV).reshape(3)
-    
+    c = cv2.cvtColor(c.reshape(1, 1, 3), cv2.COLOR_RGB2HSV).reshape(3)
+
     h = (c[0]*2) * np.pi / 180
     s = c[1] / 255
     v = c[2] / 255
-    
+
     return h, s, v
 
+
 def color_distance(im1, im2):
-    
+    '''returns the distance of the average color between 2 images
+    '''
+
     h1, s1, v1 = get_dominant_color_hsv(im1)
     h2, s2, v2 = get_dominant_color_hsv(im2)
-    
-    distances = (np.sin(h1)*s1*v1 - np.sin(h2)*s2*v2)**2 + (np.cos(h1)*s1*v1 - np.cos(h2)*s2*v2)**2 + (v1 - v2)**2
-    
+
+    distances = (np.sin(h1)*s1*v1 - np.sin(h2)*s2*v2)**2 + \
+        (np.cos(h1)*s1*v1 - np.cos(h2)*s2*v2)**2 + (v1 - v2)**2
+
     return distances * 100
 
+
 def get_bbox_edges(bbox):
-    
+
     l1 = np.linalg.norm(bbox[0] - bbox[1])
     l2 = np.linalg.norm(bbox[1] - bbox[2])
     l3 = np.linalg.norm(bbox[2] - bbox[3])
     l4 = np.linalg.norm(bbox[3] - bbox[0])
-    
+
     return l1, l2, l3, l4
 
+
 def get_bbox_diagonals(bbox):
-    
+
     d1 = np.linalg.norm(bbox[0] - bbox[2])
     d2 = np.linalg.norm(bbox[1] - bbox[3])
-    
+
     return d1, d2
 
-def valid_bbox(bbox, edges_ratio = 4, diag_ratio = 2):
+
+def valid_bbox(bbox, edges_ratio=4, diag_ratio=2):
     '''
     Function to assess if the bounding box is valid
     Parameters
@@ -94,7 +88,7 @@ def valid_bbox(bbox, edges_ratio = 4, diag_ratio = 2):
     -------
     bool
     '''
-    
+
     # edges
     l1, l2, l3, l4 = get_bbox_edges(bbox)
 
@@ -103,14 +97,46 @@ def valid_bbox(bbox, edges_ratio = 4, diag_ratio = 2):
 
     vert = [l1, l3]
     hor = [l2, l4]
-    edges = [l1,l2,l3,l4]
+    edges = [l1, l2, l3, l4]
     diagonals = [d1, d2]
 
     # first part takes care of crossing, second part of excessive distortion
-    return (np.mean(diagonals) >= np.mean(edges) and 
+    return (np.mean(diagonals) >= np.mean(edges) and
             edges_ratio*np.std(hor) <= np.mean(hor) and
-            edges_ratio*np.std(vert) <= np.mean(vert) and 
+            edges_ratio*np.std(vert) <= np.mean(vert) and
             diag_ratio*np.std(diagonals) <= np.mean(diagonals))
+
+
+# def color_distance_binned(im1, im2, n_rows=4, n_columns=4):
+#     distance_bins = np.zeros((n_rows, n_columns))
+
+#     h1, w1 = im1.shape[0], im1.shape[1]
+#     h2, w2 = im2.shape[0], im2.shape[1]
+
+#     row_step1 = h1//n_rows
+#     col_step1 = w1//n_columns
+#     row_step2 = h2//n_rows
+#     col_step2 = w2//n_columns
+
+#     for i in range(n_rows):
+#         for j in range(n_columns):
+
+#             c1 = im1[i*row_step1: (i+1)*row_step1,
+#                      j*col_step1: (j+1)*col_step1]
+
+#             c2 = im2[i*row_step2: (i+1)*row_step2,
+#                      j*col_step2: (j+1)*col_step2]
+
+#             distance_bins[i, j] = color_distance(c1, c2)
+#     return distance_bins
+
+
+def valid(im_model, im_scene, bbox, color_distace_threshold=5, edges_ratio=4, diag_ratio=2):
+    im_scene_crop = crop_scene(im_scene, bbox)
+
+    return (valid_bbox(bbox, edges_ratio, diag_ratio) and
+            color_distance(im_model, im_scene_crop) <= color_distace_threshold)
+
 
 def find_matcher_matrix(im_scene_list, im_model_list, multiple_instances=True, K=15, peaks_kw={}, homography_kw={}):
     '''Computes the matrix of ``matcher.FeatureMatcher`` between each scene image and model image
@@ -131,20 +157,23 @@ def find_matcher_matrix(im_scene_list, im_model_list, multiple_instances=True, K
         Used only if ``multiple_instances`` is set to True.
     homography_kw:
         keyword arguments passed to ``matcher.FeatureMatcher.set_homography_parameters``.
-    
+
     Returns
     -------
     2D array of shape(n_scenes, n_models) of ``matcher.FeatureMatcher`` if ``multiple_instances`` is set to False
     or ``matcher.MultipleInstacneMatcher`` if ``multiple_instances`` is set to True.
     '''
-    
+
     # Find salient points of the images and corresponding descriptors
     sift = cv2.xfeatures2d.SIFT_create()
-    kp_scene_list, des_scene_list = sift.compute(im_scene_list, sift.detect(im_scene_list))
-    kp_model_list, des_model_list = sift.compute(im_model_list, sift.detect(im_model_list))
+    kp_scene_list, des_scene_list = sift.compute(
+        im_scene_list, sift.detect(im_scene_list))
+    kp_model_list, des_model_list = sift.compute(
+        im_model_list, sift.detect(im_model_list))
 
     # The matrix is instantiated
-    matcher_matrix = np.zeros((len(im_scene_list), len(im_model_list)), dtype = object)
+    matcher_matrix = np.zeros(
+        (len(im_scene_list), len(im_model_list)), dtype=object)
 
     # The matrix is populated with matches
     for i, (im_scene, kp_scene, des_scene) in enumerate(zip(im_scene_list, kp_scene_list, des_scene_list)):
@@ -156,7 +185,7 @@ def find_matcher_matrix(im_scene_list, im_model_list, multiple_instances=True, K
             else:
                 matcher = FeatureMatcher(im_model, im_scene)
             matcher.set_homography_parameters(**homography_kw)
-            #set the previously computed descriptors and keypoints for performance reasons
+            # set the previously computed descriptors and keypoints for performance reasons
             matcher.set_descriptors_1(kp_model, des_model)
             matcher.set_descriptors_2(kp_scene, des_scene)
             matcher.find_matches()
@@ -164,21 +193,21 @@ def find_matcher_matrix(im_scene_list, im_model_list, multiple_instances=True, K
 
     return matcher_matrix
 
+
 def visualize_detections(matcher_matrix,
-                        scene_filenames=None,
-                        model_filenames=None,
-                        min_match_threshold=15,
-                        max_distortion=4,
-                        color_distace_threshold=5,
-                        draw_invalid_bbox=0,
-                        dimension=1000,
-                        vertical_layout=True,
-                        annotate = True,
-                        annotation_offset = 30,
-                        show_matches = False):
-    
+                         scene_filenames=None,
+                         model_filenames=None,
+                         min_match_threshold=15,
+                         max_distortion=4,
+                         color_distace_threshold=5,
+                         draw_invalid_bbox=0,
+                         dimension=1000,
+                         vertical_layout=True,
+                         annotate=True,
+                         annotation_offset=30,
+                         show_matches=False):
     '''Visualize the detected models with annotated bounding boxes on the scene images.
-    
+
     Parameters
     ----------
     matcher_matrix: 2D array or array-like
@@ -211,7 +240,7 @@ def visualize_detections(matcher_matrix,
         offset in pixels of the annotation of the model filename onto the homography.
     show_matches: bool, default False
         print match number alongside model name
-    
+
     Returns
     -------
     ``matplotlib.figure.Figure``, array of ``matplotlib.axes._subplots.AxesSubplot``
@@ -221,7 +250,7 @@ def visualize_detections(matcher_matrix,
     TypeError
         if the elements in ``matcher_matrix`` are not instances of ``matcher.FeatureMatcher``
     '''
-    
+
     n_scenes, n_models = matcher_matrix.shape
 
     if scene_filenames is None:
@@ -229,7 +258,7 @@ def visualize_detections(matcher_matrix,
 
     if model_filenames is None:
         model_filenames = range(n_models)
-    
+
     d = draw_invalid_bbox
 
     # width and height like the first scene image
@@ -247,14 +276,15 @@ def visualize_detections(matcher_matrix,
 
     # instantiate subplots
     dpi = 150
-    fig, axs = plt.subplots(figsize = (w/dpi, h/dpi), dpi = dpi, **subplots_kwargs)
+    fig, axs = plt.subplots(figsize=(w/dpi, h/dpi), dpi=dpi, **subplots_kwargs)
 
-    if n_scenes == 1: axs = [axs]
+    if n_scenes == 1:
+        axs = [axs]
 
     for i, line in enumerate(matcher_matrix):
         im_scene = np.copy(matcher_matrix[i][0].im2)
-        im1 = np.zeros_like(im_scene) # for overlay with filled bounding boxes
-        
+        im1 = np.zeros_like(im_scene)  # for overlay with filled bounding boxes
+
         # to keep track of center positions and match number for annotations
         centers_list = []
         matches_list = []
@@ -264,10 +294,11 @@ def visualize_detections(matcher_matrix,
 
             # find the corners of the model
             h, w = im_model.shape[0], im_model.shape[1]
-            pts = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
-            
-            centers = [] # centers of the bounding boxes for the current model
-            matches = [] # matches used for the bounding boxes for the current model
+            pts = np.float32([[0, 0], [0, h-1], [w-1, h-1],
+                              [w-1, 0]]).reshape(-1, 1, 2)
+
+            centers = []  # centers of the bounding boxes for the current model
+            matches = []  # matches used for the bounding boxes for the current model
 
             # differentiate between MultipleInstanceMatcher and FeatureMatcher
             if isinstance(matcher, MultipleInstanceMatcher):
@@ -277,14 +308,16 @@ def visualize_detections(matcher_matrix,
                 M = [M]
                 used_kp = [len(matcher.get_matches())]
             else:
-                raise TypeError("Matcher must be an instance of matcher.FeatureMatcher")
+                raise TypeError(
+                    "Matcher must be an instance of matcher.FeatureMatcher")
 
             for M, used_kp in zip(M, used_kp):
                 # Project the corners of the model onto the scene image
                 dst = cv2.perspectiveTransform(pts, M)
 
                 high_kp = used_kp >= min_match_threshold
-                true_positive = valid(im_model, im_scene, dst, color_distace_threshold, max_distortion)
+                true_positive = valid(
+                    im_model, im_scene, dst, color_distace_threshold, max_distortion)
 
                 # Set bounding box parameters
                 # normal bounding box
@@ -292,19 +325,22 @@ def visualize_detections(matcher_matrix,
                     color = Colors.GREEN
                     width = 15
                     # fill bounding box
-                    centers.append(cv2.perspectiveTransform(np.float32([[[w//2, h//2]]]), M).ravel())
+                    centers.append(cv2.perspectiveTransform(
+                        np.float32([[[w//2, h//2]]]), M).ravel())
                     matches.append(used_kp)
                     im1 = cv2.fillPoly(im1, [np.int32(dst)], color, cv2.LINE_8)
-                    im_scene = cv2.polylines(im_scene, [np.int32(dst)], True, Colors.GREEN, 15, cv2.FILLED)
+                    im_scene = cv2.polylines(
+                        im_scene, [np.int32(dst)], True, Colors.GREEN, 15, cv2.FILLED)
 
                 # distorted bounding box with high number of matches
-                if high_kp and not true_positive and (d==1 or d==3):
-                    im_scene = cv2.polylines(im_scene, [np.int32(dst)], True, Colors.ORANGE, 10, cv2.FILLED)
+                if high_kp and not true_positive and (d == 1 or d == 3):
+                    im_scene = cv2.polylines(
+                        im_scene, [np.int32(dst)], True, Colors.ORANGE, 10, cv2.FILLED)
 
                 # bounding box with low number of matches
-                if not high_kp and (d==2 or d==3):
-                    im_scene = cv2.polylines(im_scene, [np.int32(dst)], True, Colors.RED, 10, cv2.FILLED)
-                
+                if not high_kp and (d == 2 or d == 3):
+                    im_scene = cv2.polylines(
+                        im_scene, [np.int32(dst)], True, Colors.RED, 10, cv2.FILLED)
 
             # save centers
             centers_list.append(centers)
@@ -312,7 +348,7 @@ def visualize_detections(matcher_matrix,
 
         # display scene image
         axs[i].imshow(im_scene)
-        axs[i].imshow(im1, alpha = 0.3)
+        axs[i].imshow(im1, alpha=0.3)
 
         if annotate:
             # put annotations for model filenames
@@ -328,43 +364,46 @@ def visualize_detections(matcher_matrix,
                         ann = f"{model_number}: {match_number} m."
                     else:
                         ann = model_number
-                    axs[i].annotate(ann, center-np.array([a,0]), color = 'k', fontweight='bold', fontsize=10)
+                    axs[i].annotate(ann, center-np.array([a, 0]),
+                                    color='k', fontweight='bold', fontsize=10)
 
     for scene_filename, ax in zip(scene_filenames, axs.ravel()):
-        if annotate: ax.set_title(scene_filename)
+        if annotate:
+            ax.set_title(scene_filename)
         ax.set_axis_off()
 
-    fig.tight_layout(pad = 1.5)
+    fig.tight_layout(pad=1.5)
     return fig, axs
 
 
-def print_detections(matcher_matrix, 
-                     scene_filenames=None, 
-                     model_filenames=None, 
+def print_detections(matcher_matrix,
+                     scene_filenames=None,
+                     model_filenames=None,
                      color_distace_threshold=5,
-                     min_match_threshold=15, 
+                     min_match_threshold=15,
                      max_distortion=4):
-    
+
     n_scenes, n_models = matcher_matrix.shape
-    
+
     if scene_filenames is None:
         scene_filenames = range(n_scenes)
 
     if model_filenames is None:
         model_filenames = range(n_models)
-    
+
     for i, line in enumerate(matcher_matrix):
         im_scene = matcher_matrix[i][0].im2
         print(f"\nScene: {scene_filenames[i]}")
-        
+
         for j, matcher in enumerate(line):
-            
+
             im_model = matcher_matrix[i][j].im1
 
             # find the corners of the model
             h, w = im_model.shape[0], im_model.shape[1]
-            pts = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
-            
+            pts = np.float32([[0, 0], [0, h-1], [w-1, h-1],
+                              [w-1, 0]]).reshape(-1, 1, 2)
+
             # differentiate between MultipleInstanceMatcher and FeatureMatcher
             if isinstance(matcher, MultipleInstanceMatcher):
                 M, used_kp = matcher.get_homographies()
@@ -375,33 +414,35 @@ def print_detections(matcher_matrix,
             else:
                 raise TypeError(
                     "Matcher must be an instance of matcher.FeatureMatcher")
-            
+
             positions = []
-            
+
             for M, used_kp in zip(M, used_kp):
                 # Project the corners of the model onto the scene image
                 dst = cv2.perspectiveTransform(pts, M)
 
                 high_kp = used_kp >= min_match_threshold
-                true_positive = valid(im_model, im_scene, dst, color_distace_threshold, max_distortion)
+                true_positive = valid(
+                    im_model, im_scene, dst, color_distace_threshold, max_distortion)
 
                 # Set bounding box parameters
                 # normal bounding box
                 if high_kp and true_positive:
-                    
+
                     l1, l2, l3, l4 = get_bbox_edges(dst)
-                    
+
                     positions.append({
-                        'c' : cv2.perspectiveTransform(np.float32([[[w//2, h//2]]]), M).ravel(),
-                        'w' : np.mean([l2, l4]),
-                        'h' : np.mean([l1, l3])
-                        }
+                        'c': cv2.perspectiveTransform(np.float32([[[w//2, h//2]]]), M).ravel(),
+                        'w': np.mean([l2, l4]),
+                        'h': np.mean([l1, l3])
+                    }
                     )
-                    
+
             if len(positions) > 0:
-                print(f'\tProduct {model_filenames[j]} - {len(positions)} instance found:')
+                print(
+                    f'\tProduct {model_filenames[j]} - {len(positions)} instance found:')
                 for k, pos in enumerate(positions):
                     print(
                         f"\t\tInstance  {k + 1} (position: ({pos['c'][0]:.0f}, {pos['c'][1]:.0f}), width: {pos['w']:.0f}px, height: {pos['h']:.0f}px)")
-            
+
     return None
