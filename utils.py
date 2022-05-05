@@ -325,10 +325,10 @@ def visualize_detections(im_scene,
         list containing the properties of the bounding boxes of the scene image
     draw_invalid_bbox: int, default 0
         possible values:
-            0: draw only valid bounding boxes
-            1: draw valid bboxes and bounding boxes filtered by shape and color with enough matches
-            2: draw valid bboxes and bounding boxes with the right shape and color with not enough matches
-            3: draw all bounding boxes.
+            0: draw only valid bounding boxes (green, labeled)
+            1: draw also bounding boxes filtered by overlap (blue, labeled)
+            2: draw also bounding boxes filtered by shape and color (orange, unlabeled)
+            3: draw all bounding boxes (red, unlabeled).
     plot_height: int, optional
         plot height in pixels. If not given, the plot will have the same size as the scene image.
     annotate: bool, default True
@@ -383,12 +383,15 @@ def visualize_detections(im_scene,
             im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, Colors.GREEN, 15, cv2.FILLED)
 
         else:
+            if bbox_props['sufficient_matches'] and bbox_props['valid_color'] and bbox_props['valid_shape'] and d>=1:
+                im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, Colors.BLUE, 10, cv2.FILLED)
+
             # distorted bounding box with high number of matches
-            if bbox_props['sufficient_matches'] and not bbox_props['valid_shape'] and (d == 1 or d == 3):
+            if bbox_props['sufficient_matches'] and not (bbox_props['valid_shape'] or bbox_props['valid_color']) and d>=2:
                 im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, Colors.ORANGE, 10, cv2.FILLED)
 
             # bounding box with low number of matches
-            if not bbox_props['sufficient_matches'] and (d == 2 or d == 3):
+            if not bbox_props['sufficient_matches'] and d==3:
                 im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, Colors.RED, 10, cv2.FILLED)
 
     # display scene image
@@ -398,7 +401,8 @@ def visualize_detections(im_scene,
     if annotate:
         # put annotations for model filenames
         for bbox_props in bbox_props_list:
-            if not bbox_props['valid_bbox']: continue
+            if not (bbox_props['sufficient_matches'] and bbox_props['valid_color'] and bbox_props['valid_shape']): continue
+            #if not bbox_props['valid_bbox']: continue
             model_name = bbox_props['model'].split('.')[0]
             match_number = bbox_props['match_number']
             center = bbox_props['center']
@@ -408,7 +412,14 @@ def visualize_detections(im_scene,
                 ann = f"{model_name}: {match_number} m."
             else:
                 ann = model_name
-            ax.annotate(ann, center-np.array([a, 0]), color='k', fontweight='bold', fontsize=10)
+
+            ann_color = 'k'
+            if not bbox_props['valid_bbox']:
+                if d>=1:
+                    ann_color = 'r'
+                else:
+                    continue
+            ax.annotate(ann, center-np.array([a, 0]), color=ann_color, fontweight='bold', fontsize=10)
     if axes_off:
         ax.set_axis_off()
     
