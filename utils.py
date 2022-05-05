@@ -419,12 +419,34 @@ def visualize_detections(im_scene,
     return ax
 
 
-'''
-def print_detections(name_model,n_instances, name_scene, pos):
+def print_detections(bbox_props):
 
-    for i in n_instances:
-        print(f'\tProduct {name_model} - {n_instances} instance found:')
-        print(f"\t\tInstance  {i + 1} (position: ({pos[i]['c'][0]:.0f}, {pos['c'][1]:.0f}), width: {pos[i]['w']:.0f}px, height: {pos[i]['h']:.0f}px)")
+    model_names_find = np.unique(
+        np.array([props['model'] for props in bbox_props]))
 
-    return None
-'''
+    for model_name in model_names_find:
+        counter = 0
+        positions = []
+
+        for bbox_prop in bbox_props:
+
+            if (bbox_prop['model'] != model_name or not bbox_prop['valid_bbox']):
+                continue
+
+            counter += 1
+
+            l1, l2, l3, l4 = get_bbox_edges(bbox_prop['corners'])
+
+            positions.append({
+                'c': bbox_prop['center'],
+                'w': np.mean([l2, l4]),
+                'h': np.mean([l1, l3])
+            }
+            )
+
+        if len(positions) > 0:
+            print(f'\tProduct {model_name} - {counter} instance found:')
+            for k, pos in enumerate(positions):
+                print(
+                    f"\t\tInstance  {k + 1} (position: ({pos['c'][0]:.0f}, {pos['c'][1]:.0f}), width: {pos['w']:.0f}px, height: {pos['h']:.0f}px)")
+                
