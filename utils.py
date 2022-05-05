@@ -194,6 +194,7 @@ def find_matcher_matrix(im_scene_list, im_model_list, multiple_instances=True, K
 
     return matcher_matrix
 
+
 def find_bboxes(matcher_list, model_filenames=None, min_match_threshold=15, max_distortion=4, color_distance_threshold=5, bbox_overlap=0.8):
     '''Filters valid bounding boxes
 
@@ -268,6 +269,7 @@ def find_bboxes(matcher_list, model_filenames=None, min_match_threshold=15, max_
 
     return filter_overlap(bbox_props_list, bbox_overlap)
 
+
 def filter_overlap(bbox_props_list, bbox_overlap=0.8): # TODO: write this function
     '''
     Parameters
@@ -292,8 +294,8 @@ def filter_overlap(bbox_props_list, bbox_overlap=0.8): # TODO: write this functi
             if bbox_props_list[i]['match_number'] > bbox_props_list[j]['match_number'] : 
                 bbox_props_list[j]['valid_bbox'] = False
 
-
     return bbox_props_list
+
 
 def get_overlap(bbox, bbox2):
 
@@ -303,150 +305,123 @@ def get_overlap(bbox, bbox2):
 
     return inters.area / min(p1.area, p2.area)
 
-def visualize_detections(im_scene_list,
-                         bbox_props_container,
-                         scene_filenames=None,
+
+def visualize_detections(im_scene,
+                         bbox_props_list,
                          draw_invalid_bbox=0,
-                         dimension=1000,
-                         vertical_layout=True,
+                         plot_height=-1,
                          annotate=True,
                          annotation_offset=30,
-                         show_matches=False):
+                         show_matches=False,
+                         ax = None):
     '''Visualize the detected models with annotated bounding boxes on the scene images.
 
     Parameters
     ----------
-    im_scene_list: array or array-like
-        list of scene images
-    bbox_props_container:
-        list containing the properties of the bounding boxes for each scene image
-    scene_filenames: array or array-like, optional
-        array of filenames of the scene images, used for visualization.
+    im_scene: array
+        scene image
+    bbox_props_list:
+        list containing the properties of the bounding boxes of the scene image
     draw_invalid_bbox: int, default 0
         possible values:
             0: draw only valid bounding boxes
             1: draw valid bboxes and bounding boxes filtered by shape and color with enough matches
             2: draw valid bboxes and bounding boxes with the right shape and color with not enough matches
             3: draw all bounding boxes.
-    dimension: int, default 1000
-        plot dimension in pixels.
-        If ``vertical_layout`` is True, dimension refers to the width.
-        If ``vertical_layout`` is False, dimension refers to the height.
-    vertical_layout: bool, default True
-        vertical or horizontal stacking of scene images.
+    plot_height: int, optional
+        plot height in pixels. If not given, the plot will have the same size as the scene image.
     annotate: bool, default True
         display filenames of the scene and model images.
     annotation_offset: int, default 30
         offset in pixels of the annotation of the model filename onto the homography.
     show_matches: bool, default False
         print match number alongside model name
+    ax: ``matplotlib.axes._subplots.AxesSubplot``, optional
+        the axes on which to show the plot
 
     Returns
     -------
-    ``matplotlib.figure.Figure``, array of ``matplotlib.axes._subplots.AxesSubplot``
+    if ``ax`` is not provided:
+    ``matplotlib.figure.Figure``, ``matplotlib.axes._subplots.AxesSubplot``
 
-    Raises
-    ------
-    TypeError
-        if the elements in ``matcher_matrix`` are not instances of ``matcher.FeatureMatcher``
+    if ``ax`` is provided:
+    ``matplotlib.axes._subplots.AxesSubplot``
     '''
-
-    n_scenes = len(im_scene_list)
-
-    if scene_filenames is None:
-        scene_filenames = range(n_scenes)
 
     d = draw_invalid_bbox
 
-    # width and height like the first scene image
-    height = im_scene_list[0].shape[0]
-    width = im_scene_list[0].shape[1]
+    create_axes = ax==None
 
-    if vertical_layout:
-        w = dimension
-        h = w*n_scenes*height/width
-        subplots_kwargs = {'nrows': n_scenes}
-    else:
-        h = dimension
-        w = h*n_scenes*width/height
-        subplots_kwargs = {'ncols': n_scenes}
+    if create_axes:
+        if plot_height == -1:
+            h = im_scene.shape[0]
+            w = im_scene.shape[1]
+        else:
+            # width and height like the first scene image
+            height = im_scene.shape[0]
+            width = im_scene.shape[1]
+            h = plot_height
+            w = plot_height*width/height
+        
+        # instantiate subplots
+        dpi = 150
+        fig, ax = plt.subplots(figsize=(w/dpi, h/dpi), dpi=dpi)
 
-    # instantiate subplots
-    dpi = 150
-    fig, axs = plt.subplots(figsize=(w/dpi, h/dpi), dpi=dpi, **subplots_kwargs)
+    im_scene = np.copy(im_scene)
+    im1 = np.zeros_like(im_scene)  # for overlay with filled bounding boxes
 
-    if n_scenes == 1:
-        axs = [axs]
+    for bbox_props in bbox_props_list:
 
-    for ax, im, bbox_props_list in zip(axs, im_scene_list, bbox_props_container):
-        im_scene = np.copy(im)
-        im1 = np.zeros_like(im_scene)  # for overlay with filled bounding boxes
+        bbox = bbox_props['corners']
 
-        centers_list = []
-        matches_list = []
+        if bbox_props['valid_bbox']:
+            # fill bounding box
+            im1 = cv2.fillPoly(im1, [np.int32(bbox)], Colors.GREEN, cv2.LINE_8)
+            im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, Colors.GREEN, 15, cv2.FILLED)
 
+        else:
+            # distorted bounding box with high number of matches
+            if bbox_props['sufficient_matches'] and not bbox_props['valid_shape'] and (d == 1 or d == 3):
+                im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, Colors.ORANGE, 10, cv2.FILLED)
+
+            # bounding box with low number of matches
+            if not bbox_props['sufficient_matches'] and (d == 2 or d == 3):
+                im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, Colors.RED, 10, cv2.FILLED)
+
+    # display scene image
+    ax.imshow(im_scene)
+    ax.imshow(im1, alpha=0.3)
+
+    if annotate:
+        # put annotations for model filenames
         for bbox_props in bbox_props_list:
-            centers = []
-            matches = []
+            if not bbox_props['valid_bbox']: continue
+            model_name = bbox_props['model'].split('.')[0]
+            match_number = bbox_props['match_number']
+            center = bbox_props['center']
 
-            bbox = bbox_props['corners']
-
-            if bbox_props['valid_bbox']:
-                color = Colors.GREEN
-                width = 15
-                centers.append(bbox_props['center'])
-                matches.append(bbox_props['match_number'])
-                # fill bounding box
-                im1 = cv2.fillPoly(im1, [np.int32(bbox)], color, cv2.LINE_8)
-                im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, Colors.GREEN, 15, cv2.FILLED)
-
+            a = annotation_offset
+            if show_matches:
+                ann = f"{model_name}: {match_number} m."
             else:
-                # distorted bounding box with high number of matches
-                if bbox_props['sufficient_matches'] and not bbox_props['valid_shape'] and (d == 1 or d == 3):
-                    im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, Colors.ORANGE, 10, cv2.FILLED)
+                ann = model_name
+            ax.annotate(ann, center-np.array([a, 0]), color='k', fontweight='bold', fontsize=10)
 
-                # bounding box with low number of matches
-                if not bbox_props['sufficient_matches'] and (d == 2 or d == 3):
-                    im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, Colors.RED, 10, cv2.FILLED)
-
-            centers_list.append(centers)
-            matches_list.append(matches)
-        # display scene image
-        ax.imshow(im_scene)
-        ax.imshow(im1, alpha=0.3)
-
-        if annotate:
-            # put annotations for model filenames
-            for bbox_props in bbox_props_list:
-                if not bbox_props['valid_bbox']: continue
-                model_name = bbox_props['model']
-                match_number = bbox_props['match_number']
-                center = bbox_props['center']
-
-                a = annotation_offset
-                if show_matches:
-                    ann = f"{model_name}: {match_number} m."
-                else:
-                    ann = model_name
-                ax.annotate(ann, center-np.array([a, 0]), color='k', fontweight='bold', fontsize=10)
-
-    for scene_filename, ax in zip(scene_filenames, axs.ravel()):
-        if annotate:
-            ax.set_title(scene_filename)
-        ax.set_axis_off()
-
-    fig.tight_layout(pad=1.5)
-    return fig, axs
-
+    ax.set_axis_off()
+    
+    if create_axes:
+        fig.tight_layout(pad=1.5)
+        return fig, ax
+    
+    return ax
 
 
 '''
+def print_detections(name_model,n_instances, name_scene, pos):
 
-def print_detections(name_model,n_instance, name_scene):
-
-            print(f'\tProduct {name_model} - {n_instance} instance found:')
-            for k, pos in enumerate():
-                print(f"\t\tInstance  {k + 1} (position: ({pos['c'][0]:.0f}, {pos['c'][1]:.0f}), width: {pos['w']:.0f}px, height: {pos['h']:.0f}px)")
+    for i in n_instances:
+        print(f'\tProduct {name_model} - {n_instances} instance found:')
+        print(f"\t\tInstance  {i + 1} (position: ({pos[i]['c'][0]:.0f}, {pos['c'][1]:.0f}), width: {pos[i]['w']:.0f}px, height: {pos[i]['h']:.0f}px)")
 
     return None
 '''
