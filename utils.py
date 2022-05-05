@@ -16,6 +16,55 @@ class Colors:
     WHITE = (255, 255, 255)
     GRAY = (127, 127, 127)
 
+
+def valid(im_model, im_scene, bbox, color_distace_threshold=5, edges_ratio=4, diag_ratio=2):
+    im_scene_crop = crop_scene(im_scene, bbox)
+    
+    return (valid_bbox(bbox, edges_ratio, diag_ratio) and 
+            color_distance(im_model, im_scene_crop) <= color_distace_threshold)
+    
+def crop_scene(im_scene, bbox):
+    # bbox.astype(np.int32)
+    
+    a = bbox[0][0][0].astype(np.int32)
+    b = bbox[3][0][0].astype(np.int32)
+    c = bbox[0][0][1].astype(np.int32)
+    d = bbox[1][0][1].astype(np.int32)
+    
+    if a < 0:
+        a = 0
+    if b < 0:
+        b = 0
+    if c < 0:
+        c = 0
+    if d < 0:
+        d = 0
+    
+    return im_scene[c:d, a:b]
+
+
+def get_dominant_color_hsv(im):
+    
+    ## TODO: docstring (im rgb)
+    
+    c = np.mean(im, axis=(0, 1)).astype(np.uint8)
+    c = cv2.cvtColor(c.reshape(1,1,3), cv2.COLOR_RGB2HSV).reshape(3)
+    
+    h = (c[0]*2) * np.pi / 180
+    s = c[1] / 255
+    v = c[2] / 255
+    
+    return h, s, v
+
+def color_distance(im1, im2):
+    
+    h1, s1, v1 = get_dominant_color_hsv(im1)
+    h2, s2, v2 = get_dominant_color_hsv(im2)
+    
+    distances = (np.sin(h1)*s1*v1 - np.sin(h2)*s2*v2)**2 + (np.cos(h1)*s1*v1 - np.cos(h2)*s2*v2)**2 + (v1 - v2)**2
+    
+    return distances * 100
+
 def get_bbox_edges(bbox):
     
     l1 = np.linalg.norm(bbox[0] - bbox[1])
@@ -120,6 +169,7 @@ def visualize_detections(matcher_matrix,
                         model_filenames=None,
                         min_match_threshold=15,
                         max_distortion=4,
+                        color_distace_threshold=5,
                         draw_invalid_bbox=0,
                         dimension=1000,
                         vertical_layout=True,
@@ -141,6 +191,8 @@ def visualize_detections(matcher_matrix,
         minimum number of matches to consider a bounding box as valid.
     max_distortion: int, default 4
         maximum distortion parameter as defined in ``valid_bbox`` to consider a bounding box as valid.
+    color_distance_threshold: float, default 5
+        dominant color distance in HSV space
     draw_invalid_bbox: int, default 0
         possible values:
             0: draw only valid bounding boxes
@@ -232,11 +284,11 @@ def visualize_detections(matcher_matrix,
                 dst = cv2.perspectiveTransform(pts, M)
 
                 high_kp = used_kp >= min_match_threshold
-                undistorted = valid_bbox(dst, max_distortion)
+                true_positive = valid(im_model, im_scene, dst, color_distace_threshold, max_distortion)
 
                 # Set bounding box parameters
                 # normal bounding box
-                if high_kp and undistorted:
+                if high_kp and true_positive:
                     color = Colors.GREEN
                     width = 15
                     # fill bounding box
@@ -246,7 +298,7 @@ def visualize_detections(matcher_matrix,
                     im_scene = cv2.polylines(im_scene, [np.int32(dst)], True, Colors.GREEN, 15, cv2.FILLED)
 
                 # distorted bounding box with high number of matches
-                if high_kp and not undistorted and (d==1 or d==3):
+                if high_kp and not true_positive and (d==1 or d==3):
                     im_scene = cv2.polylines(im_scene, [np.int32(dst)], True, Colors.ORANGE, 10, cv2.FILLED)
 
                 # bounding box with low number of matches
@@ -286,7 +338,12 @@ def visualize_detections(matcher_matrix,
     return fig, axs
 
 
-def print_detections(matcher_matrix, scene_filenames=None, model_filenames=None, min_match_threshold=15, max_distortion=4):
+def print_detections(matcher_matrix, 
+                     scene_filenames=None, 
+                     model_filenames=None, 
+                     color_distace_threshold=5,
+                     min_match_threshold=15, 
+                     max_distortion=4):
     
     n_scenes, n_models = matcher_matrix.shape
     
@@ -297,6 +354,7 @@ def print_detections(matcher_matrix, scene_filenames=None, model_filenames=None,
         model_filenames = range(n_models)
     
     for i, line in enumerate(matcher_matrix):
+        im_scene = matcher_matrix[i][0].im2
         print(f"\nScene: {scene_filenames[i]}")
         
         for j, matcher in enumerate(line):
@@ -325,11 +383,11 @@ def print_detections(matcher_matrix, scene_filenames=None, model_filenames=None,
                 dst = cv2.perspectiveTransform(pts, M)
 
                 high_kp = used_kp >= min_match_threshold
-                undistorted = valid_bbox(dst, max_distortion)
+                true_positive = valid(im_model, im_scene, dst, color_distace_threshold, max_distortion)
 
                 # Set bounding box parameters
                 # normal bounding box
-                if high_kp and undistorted:
+                if high_kp and true_positive:
                     
                     l1, l2, l3, l4 = get_bbox_edges(dst)
                     
