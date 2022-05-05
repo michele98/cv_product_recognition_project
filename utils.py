@@ -1,8 +1,9 @@
+from audioop import avg
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 from matchers import FeatureMatcher, MultipleInstanceMatcher
-
+from shapely.geometry import Polygon
 
 class Colors:
     # RGB values setting for colors
@@ -193,6 +194,114 @@ def find_matcher_matrix(im_scene_list, im_model_list, multiple_instances=True, K
 
     return matcher_matrix
 
+def find_bboxes(matcher_list, model_filenames=None, min_match_threshold=15, max_distortion=4, color_distance_threshold=5, bbox_overlap=0.8):
+    '''Filters valid bounding boxes
+
+    Parameters
+    ----------
+    matcher_list: array or array-like
+        array of ``matchers.FeatureMatcher`` of shape (n_models).
+    model_filenames: array or array-like, optional
+        array of filenames of the model images, used for representing output.
+    min_match_threshold: int, default 15
+        minimum number of matches to consider a bounding box as valid.
+    max_distortion: int, default 4
+        maximum distortion parameter as defined in ``valid_bbox`` to consider a bounding box as valid.
+    color_distance_threshold: float, default 5
+        average color distance in HSV space to filter false positive bounding boxes
+    bbox_overlap: float, default 0.8
+        ratio of the area of the intersection between 2 bounding boxes and the smallest of the 2 bounding boxes.
+        Used for the filtering of overlapping bounding boxes.
+    Returns
+    -------
+    list of dict
+        returns a list of dictionaries with the following attributes:
+        'model': the name of the model image
+        'bboxes': dictionary with the properties of all bounding boxes
+    '''
+    if model_filenames == None:
+        model_filenames = [str(i) for i in range(len(matcher_list))]
+    
+    im_scene = matcher_list[0].im2
+
+    bbox_props_list = []
+    for matcher, model_name in zip(matcher_list, model_filenames):
+        
+        im_model = matcher.im1
+
+        # find the corners of the model
+        h, w = im_model.shape[0], im_model.shape[1]
+        pts = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
+
+        # differentiate between MultipleInstanceMatcher and FeatureMatcher
+        if isinstance(matcher, MultipleInstanceMatcher):
+            homographies, used_kp_list = matcher.get_homographies()
+        elif isinstance(matcher, FeatureMatcher):
+            homographies, _ = matcher.get_homography()
+            homographies = [homographies]
+            used_kp_list = [len(matcher.get_matches())]
+        else:
+            raise TypeError(
+                "Matcher must be an instance of matcher.FeatureMatcher")
+
+        for i, (M, used_kp) in enumerate(zip(homographies, used_kp_list)):
+            # Project the corners of the model onto the scene image
+            bbox = cv2.perspectiveTransform(pts, M)
+
+            high_kp = used_kp >= min_match_threshold
+            valid_shape = valid_bbox(bbox, max_distortion, max_distortion/2)
+            avg_color_distance = color_distance(im_model, crop_scene(im_scene, bbox))
+            valid_color = avg_color_distance <= color_distance_threshold
+            center = cv2.perspectiveTransform(np.float32([[[w//2, h//2]]]), M).ravel()
+
+            bbox_props_list.append({
+                'model': model_name,
+                'corners': bbox,
+                'center': center,
+                'match_number': used_kp,
+                'sufficient_matches': high_kp,
+                'valid_shape': valid_shape,
+                'color_distance': avg_color_distance,
+                'valid_color': valid_color,
+                'valid_bbox': high_kp and valid_shape and valid_color,
+            })
+
+    return filter_overlap(bbox_props_list, bbox_overlap)
+
+def filter_overlap(bbox_props_list, bbox_overlap=0.8): # TODO: write this function
+    '''
+    Parameters
+    ----------
+    bbox_overlap: float, default 0.8
+        ratio of the area of the intersection between 2 bounding boxes and the smallest of the 2 bounding boxes.
+        Used for the filtering of overlapping bounding boxes.
+    '''
+    for i in range(len(bbox_props_list)):
+        if not bbox_props_list[i]['valid_bbox']: continue
+
+        bbox = bbox_props_list[i]['corners']
+
+        for j in range(len(bbox_props_list)):
+            if i==j or not bbox_props_list[j]['valid_bbox']: continue
+
+            bbox2 = bbox_props_list[j]['corners']
+            overlap = get_overlap(bbox, bbox2) #TODO: write this function
+
+            if overlap <= bbox_overlap: continue
+
+            if bbox_props_list[i]['match_number'] > bbox_props_list[j]['match_number'] : 
+                bbox_props_list[j]['valid_bbox'] = False
+
+
+    return bbox_props_list
+
+def get_overlap(bbox, bbox2):
+
+    p1 = Polygon(np.asarray(bbox)[:,0,:])
+    p2 = Polygon(np.asarray(bbox2)[:,0,:])
+    inters = p1.intersection(p2)
+
+    return inters.area / min(p1.area, p2.area)
 
 def visualize_detections(matcher_matrix,
                          scene_filenames=None,
@@ -200,6 +309,7 @@ def visualize_detections(matcher_matrix,
                          min_match_threshold=15,
                          max_distortion=4,
                          color_distace_threshold=5,
+                         bbox_overlap=0.8,
                          draw_invalid_bbox=0,
                          dimension=1000,
                          vertical_layout=True,
@@ -221,7 +331,10 @@ def visualize_detections(matcher_matrix,
     max_distortion: int, default 4
         maximum distortion parameter as defined in ``valid_bbox`` to consider a bounding box as valid.
     color_distance_threshold: float, default 5
-        dominant color distance in HSV space
+        average color distance in HSV space to filter false positive bounding boxes
+    bbox_overlap: float, default 0.8
+        ratio of the area of the intersection between 2 bounding boxes and the smallest of the 2 bounding boxes.
+        Used for the filtering of overlapping bounding boxes.
     draw_invalid_bbox: int, default 0
         possible values:
             0: draw only valid bounding boxes
@@ -374,6 +487,8 @@ def visualize_detections(matcher_matrix,
 
     fig.tight_layout(pad=1.5)
     return fig, axs
+
+    
 
 
 def print_detections(matcher_matrix,
