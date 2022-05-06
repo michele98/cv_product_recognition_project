@@ -287,9 +287,11 @@ def get_bbox_overlap(bbox1, bbox2):
     '''
     p1 = Polygon(np.asarray(bbox1)[:,0,:])
     p2 = Polygon(np.asarray(bbox2)[:,0,:])
-    inters = p1.intersection(p2)
 
-    return inters.area / min(p1.area, p2.area)
+    if not (p1.is_valid and p2.is_valid):
+        return 1.
+
+    return p1.intersection(p2).area / min(p1.area, p2.area)
 
 
 def filter_overlap(bbox_props_list, bbox_overlap_threshold=0.8):
