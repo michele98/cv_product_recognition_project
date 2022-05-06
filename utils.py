@@ -186,16 +186,16 @@ def find_matcher_matrix(im_scene_list, im_model_list, multiple_instances=True, K
     return matcher_matrix
 
 
-def find_bboxes(matcher_list, model_filenames=None, min_match_threshold=15, max_distortion=4, color_distance_threshold=5, bbox_overlap_threshold=0.8):
+def find_bboxes(matcher_list, model_labels=None, min_match_threshold=15, max_distortion=4, color_distance_threshold=5, bbox_overlap_threshold=0.8):
     '''
     Filter valid bounding boxes.
 
     Parameters
     ----------
     matcher_list : array or array-like
-        Array of ``matchers.FeatureMatcher`` of shape (n_models).
-    model_filenames : array or array-like, optional
-        Array of filenames of the model images, used for representing output.
+        list of ``matchers.FeatureMatcher`` of length (n_models).
+    model_labels : array or array-like, optional
+        list of labels of the model images, used for representing output.
     min_match_threshold : int, default 15
         Minimum number of matches to consider a bounding box as valid.
     max_distortion : int, default 4
@@ -230,13 +230,13 @@ def find_bboxes(matcher_list, model_filenames=None, min_match_threshold=15, max_
                 True if ``sufficient_matches``, ``valid_color``, ``valid_shape`` are true and if the bounding box does not overlap
                 with another bounding box with more matches.
     '''
-    if model_filenames == None:
-        model_filenames = [str(i) for i in range(len(matcher_list))]
+    if model_labels == None:
+        model_labels = [str(i) for i in range(len(matcher_list))]
     
     im_scene = matcher_list[0].im2
 
     bbox_props_list = []
-    for matcher, model_name in zip(matcher_list, model_filenames):
+    for matcher, model_name in zip(matcher_list, model_labels):
         
         im_model = matcher.im1
 
@@ -335,7 +335,7 @@ def rgb_to_hex(rgb):
 
 def annotate_bboxes(ax, bbox_props_list, annotation_offset, show_matches, draw_invalid_bbox):
     '''
-    Put the model filenames onto the corresponding bounding box.
+    Put the model labels onto the corresponding bounding box.
 
     Parameters
     ----------
@@ -402,11 +402,11 @@ def visualize_detections(im_scene,
 
     Parameters
     ----------
-    im_scene: array
+    im_scene : array
         Scene image
-    bbox_props_list:
+    bbox_props_list : list of dict
         List containing the properties of the bounding boxes of the scene image
-    draw_invalid_bbox: int or tuple of int, default 0
+    draw_invalid_bbox : int or tuple of int, default 0
         Flag on which bounding boxes to draw. Possible values:
             0: valid bounding boxes (green, labeled)
             1: bounding boxes filtered by overlap (blue, labeled)
@@ -414,26 +414,26 @@ def visualize_detections(im_scene,
             3: bounding boxes filtered by geometry (orange, unlabeled)
             4: bounding boxes filtered by match number (red, unlabeled).
             5: draw all bounding boxes
-    plot_height: int, optional
+    plot_height : int, optional
         Plot height in pixels. If not given, the plot will have the same size as the scene image.
-    annotate: bool, default True
-        Display filenames of the scene and model images.
-    annotation_offset: int, default 30
+    annotate : bool, default True
+        Display labels of the scene and model images.
+    annotation_offset : int, default 30
         Offset in pixels of the label of the bounding box.
-    show_matches: bool, default False
+    show_matches : bool, default False
         Print match number alongside model name
-    ax: ``matplotlib.axes._subplots.AxesSubplot``, optional
+    ax : ``matplotlib.axes._subplots.AxesSubplot``, optional
         The axes on which to show the plot
-    axes_off: bool, default False
+    axes_off : bool, default False
         Toggles axes ticks on plot
-    fill_bbox: bool, default True
+    fill_bbox : bool, default True
 
     Returns
     -------
-    if ``ax`` is not provided:
+    if ``ax`` is not provided :
     ``matplotlib.figure.Figure``, ``matplotlib.axes._subplots.AxesSubplot``
 
-    if ``ax`` is provided:
+    if ``ax`` is provided :
     ``matplotlib.axes._subplots.AxesSubplot``
     '''
     d = draw_invalid_bbox
