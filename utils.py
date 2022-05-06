@@ -32,7 +32,8 @@ def crop_scene(im_scene, bbox):
 
 
 def get_dominant_color_hsv(im):
-    '''returns the dominant color in HSV space of and RGB image 
+    '''
+    Return the dominant color in HSV space of an input RGB image.
     '''
 
     c = np.mean(im, axis=(0, 1)).astype(np.uint8)
@@ -46,9 +47,22 @@ def get_dominant_color_hsv(im):
 
 
 def color_distance(im1, im2):
-    '''returns the distance of the average color between 2 images
     '''
+    Calculate the color distance between 2 images.
+    The color distance is computed by finding the average RGB color of each image
+    and by finding the distance of the two colors in HSV space.
 
+    Parameters
+    ----------
+    im1 : array
+        RGB image
+    im2 : array
+        RGB image
+
+    Returns
+    -------
+    distance : float
+    '''
     h1, s1, v1 = get_dominant_color_hsv(im1)
     h2, s2, v2 = get_dominant_color_hsv(im2)
 
@@ -78,18 +92,22 @@ def get_bbox_diagonals(bbox):
 
 def valid_bbox(bbox, edges_ratio=4, diag_ratio=2):
     '''
-    Function to assess if the bounding box is valid
+    Perform geometric filtering of a bounding box.
+
     Parameters
     ----------
-    edges_ratio: float, default 4 
+    bbox : array
+        bounding box, constituted of an array of shape (n_corners, 1, 2).
+    edges_ratio : float, default 4 
         edge distortion parameter: measures the threshold for the ratio between the mean of opposing edges and their standard deviation.
-    diag_ratio: float, default 2
+    diag_ratio : float, default 2
         diagonal distortion parameter: measures the threshold for the ratio between the mean of the diagonals and their standard deviation.
+
     Returns
     -------
     bool
+        weather the shape of the bounding box is valid according to the given distortion parameters.
     '''
-
     # edges
     l1, l2, l3, l4 = get_bbox_edges(bbox)
 
@@ -108,63 +126,34 @@ def valid_bbox(bbox, edges_ratio=4, diag_ratio=2):
             diag_ratio*np.std(diagonals) <= np.mean(diagonals))
 
 
-# def color_distance_binned(im1, im2, n_rows=4, n_columns=4):
-#     distance_bins = np.zeros((n_rows, n_columns))
-
-#     h1, w1 = im1.shape[0], im1.shape[1]
-#     h2, w2 = im2.shape[0], im2.shape[1]
-
-#     row_step1 = h1//n_rows
-#     col_step1 = w1//n_columns
-#     row_step2 = h2//n_rows
-#     col_step2 = w2//n_columns
-
-#     for i in range(n_rows):
-#         for j in range(n_columns):
-
-#             c1 = im1[i*row_step1: (i+1)*row_step1,
-#                      j*col_step1: (j+1)*col_step1]
-
-#             c2 = im2[i*row_step2: (i+1)*row_step2,
-#                      j*col_step2: (j+1)*col_step2]
-
-#             distance_bins[i, j] = color_distance(c1, c2)
-#     return distance_bins
-
-
-def valid(im_model, im_scene, bbox, color_distace_threshold=5, edges_ratio=4, diag_ratio=2):
-    im_scene_crop = crop_scene(im_scene, bbox)
-
-    return (valid_bbox(bbox, edges_ratio, diag_ratio) and
-            color_distance(im_model, im_scene_crop) <= color_distace_threshold)
-
-
 def find_matcher_matrix(im_scene_list, im_model_list, multiple_instances=True, K=15, peaks_kw={}, homography_kw={}):
-    '''Computes the matrix of ``matcher.FeatureMatcher`` between each scene image and model image
+    '''
+    Compute the matrix of ``matcher.FeatureMatcher`` between each scene image and model image
 
     Parameters
     ----------
-    im_scene_list: array or array-like
+    im_scene_list : array or array-like
         list of scene images
-    im_model_list: array or array-like
+    im_model_list : array or array-like
         list of model images
-    multiple_instances: bool, default True
+    multiple_instances : bool, default True
         find single or multiple instances of each model in each scene
-    K: int, default 15
+    K : int, default 15
         binning dimension in pixel of the accumulator array for the barycenter votes in the GHT.
         The minimum value is 1. Used only if ``multiple_instances`` is set to True.
-    peaks_kw:
+    peaks_kw : dict
         keyword arguments passed to ``scipy.find_peaks`` for finding the peaks in the GHT accumulator.
         Used only if ``multiple_instances`` is set to True.
-    homography_kw:
+    homography_kw : dict
         keyword arguments passed to ``matcher.FeatureMatcher.set_homography_parameters``.
 
     Returns
     -------
-    2D array of shape(n_scenes, n_models) of ``matcher.FeatureMatcher`` if ``multiple_instances`` is set to False
-    or ``matcher.MultipleInstacneMatcher`` if ``multiple_instances`` is set to True.
+    matcher_matrix : array of ``matcher.FeatureMatcher`` or ``matcher.MultipleInstacneMatcher``
+        the shape is (n_scenes, n_models).
+        If ``multiple_instances`` is set to False, the type of the array elements is ``matcher.FeatureMatcher``
+        If ``multiple_instances`` is set to True, the type of the array elements is ``matcher.MultipleInstacneMatcher``
     '''
-
     # Find salient points of the images and corresponding descriptors
     sift = cv2.xfeatures2d.SIFT_create()
     kp_scene_list, des_scene_list = sift.compute(
@@ -195,30 +184,49 @@ def find_matcher_matrix(im_scene_list, im_model_list, multiple_instances=True, K
     return matcher_matrix
 
 
-def find_bboxes(matcher_list, model_filenames=None, min_match_threshold=15, max_distortion=4, color_distance_threshold=5, bbox_overlap=0.8):
-    '''Filters valid bounding boxes
+def find_bboxes(matcher_list, model_filenames=None, min_match_threshold=15, max_distortion=4, color_distance_threshold=5, bbox_overlap_threshold=0.8):
+    '''
+    Filter valid bounding boxes.
 
     Parameters
     ----------
-    matcher_list: array or array-like
-        array of ``matchers.FeatureMatcher`` of shape (n_models).
-    model_filenames: array or array-like, optional
-        array of filenames of the model images, used for representing output.
-    min_match_threshold: int, default 15
-        minimum number of matches to consider a bounding box as valid.
-    max_distortion: int, default 4
-        maximum distortion parameter as defined in ``valid_bbox`` to consider a bounding box as valid.
-    color_distance_threshold: float, default 5
-        average color distance in HSV space to filter false positive bounding boxes
-    bbox_overlap: float, default 0.8
-        ratio of the area of the intersection between 2 bounding boxes and the smallest of the 2 bounding boxes.
+    matcher_list : array or array-like
+        Array of ``matchers.FeatureMatcher`` of shape (n_models).
+    model_filenames : array or array-like, optional
+        Array of filenames of the model images, used for representing output.
+    min_match_threshold : int, default 15
+        Minimum number of matches to consider a bounding box as valid.
+    max_distortion : int, default 4
+        Aaximum distortion parameter as defined in ``valid_bbox`` to consider a bounding box as valid.
+    color_distance_threshold : float, default 5
+        Average color distance in HSV space to filter false positive bounding boxes.
+    bbox_overlap_threshold : float, default 0.8
+        Ratio of the area of the intersection between 2 bounding boxes and the smallest of the 2 bounding boxes.
         Used for the filtering of overlapping bounding boxes.
+
     Returns
     -------
     list of dict
-        returns a list of dictionaries with the following attributes:
-        'model': the name of the model image
-        'bboxes': dictionary with the properties of all bounding boxes
+        Each element of the list has the following attributes:
+            model : string
+                The name of the model image-
+            corners : array
+                coordinates in pixels of the corners of the bounding box. Its shape is (4, 1, 2,).
+            center : array
+                coordinates in pixels of center of the bounding box. Its shape is (2,).
+            match_number : int
+                Number of matches used to compute the bounding box.
+            sufficient_matches : bool
+                True if ``match_number`` is more than ``min_match_threshold``.
+            valid_shape : bool
+                True if the shape of the bounding box is valid according to ``max_distortion``.
+            color_distance : float
+                Distance of the average color distance between the model image and the scene image in the bounding box.
+            valid_color : bool
+                True if ``color_distance`` is smaller than ``color_distance_threshold``.
+            valid_bbox : bool
+                True if ``sufficient_matches``, ``valid_color``, ``valid_shape`` are true and if the bounding box does not overlap
+                with another bounding box with more matches.
     '''
     if model_filenames == None:
         model_filenames = [str(i) for i in range(len(matcher_list))]
@@ -267,16 +275,36 @@ def find_bboxes(matcher_list, model_filenames=None, min_match_threshold=15, max_
                 'valid_bbox': high_kp and valid_shape and valid_color,
             })
 
-    return filter_overlap(bbox_props_list, bbox_overlap)
+    return filter_overlap(bbox_props_list, bbox_overlap_threshold)
 
 
-def filter_overlap(bbox_props_list, bbox_overlap=0.8): # TODO: write this function
+def get_bbox_overlap(bbox1, bbox2):
     '''
+    Find the overlap between 2 bounding boxes.
+    This is done by calculating the area of the intersection of the bounding boxes and dividing it by the area of the smallest bounding box.
+    '''
+    p1 = Polygon(np.asarray(bbox1)[:,0,:])
+    p2 = Polygon(np.asarray(bbox2)[:,0,:])
+    inters = p1.intersection(p2)
+
+    return inters.area / min(p1.area, p2.area)
+
+
+def filter_overlap(bbox_props_list, bbox_overlap_threshold=0.8):
+    '''
+    Filter overlapping bounding boxes
+
     Parameters
     ----------
-    bbox_overlap: float, default 0.8
+    bbox_props_list: list of dict
+
+    bbox_overlap_threshold: float, default 0.8
         ratio of the area of the intersection between 2 bounding boxes and the smallest of the 2 bounding boxes.
         Used for the filtering of overlapping bounding boxes.
+    
+    Returns
+    -------
+    list of dict
     '''
     for i in range(len(bbox_props_list)):
         if not bbox_props_list[i]['valid_bbox']: continue
@@ -287,9 +315,9 @@ def filter_overlap(bbox_props_list, bbox_overlap=0.8): # TODO: write this functi
             if i==j or not bbox_props_list[j]['valid_bbox']: continue
 
             bbox2 = bbox_props_list[j]['corners']
-            overlap = get_overlap(bbox, bbox2) #TODO: write this function
+            overlap = get_bbox_overlap(bbox, bbox2)
 
-            if overlap <= bbox_overlap: continue
+            if overlap <= bbox_overlap_threshold: continue
 
             if bbox_props_list[i]['match_number'] > bbox_props_list[j]['match_number'] : 
                 bbox_props_list[j]['valid_bbox'] = False
@@ -297,13 +325,64 @@ def filter_overlap(bbox_props_list, bbox_overlap=0.8): # TODO: write this functi
     return bbox_props_list
 
 
-def get_overlap(bbox, bbox2):
+def rgb_to_hex(rgb):
+    '''Convert an rgb tuple to a hex string.
+    '''
+    return '#{:0>2X}{:0>2X}{:0>2X}'.format(rgb[0], rgb[1], rgb[2])
 
-    p1 = Polygon(np.asarray(bbox)[:,0,:])
-    p2 = Polygon(np.asarray(bbox2)[:,0,:])
-    inters = p1.intersection(p2)
 
-    return inters.area / min(p1.area, p2.area)
+def annotate_bboxes(ax, bbox_props_list, annotation_offset, show_matches, draw_invalid_bbox):
+    '''
+    Put the model filenames onto the corresponding bounding box.
+
+    Parameters
+    ----------
+    ax: matplotlib.axes._subplots.AxesSubplot
+        axes on which to annotate
+    bbox_props_list: list of dict
+    annotation_offset: int
+        offset in pixels of the label of the bounding box.
+    show_matches: bool
+        print match number alongside model name
+    '''
+    d = draw_invalid_bbox
+    a = annotation_offset
+
+    for bbox_props in bbox_props_list:
+        model_name = bbox_props['model'].split('.')[0]
+        match_number = bbox_props['match_number']
+        center = bbox_props['center']
+
+        if show_matches:
+            ann = f"{model_name}: {match_number} m."
+        else:
+            ann = model_name
+
+        # valid bboxes
+        if bbox_props['valid_bbox']:
+            if not 0 in d:
+                continue
+            ann_color = 'k'
+            facecolor = rgb_to_hex(Colors.GREEN)
+            alpha = 0.7
+        else:
+            # filtered by overlap
+            if bbox_props['sufficient_matches'] and bbox_props['valid_shape'] and bbox_props['valid_color'] and 1 in d:
+                ann_color = 'w'
+                facecolor = rgb_to_hex(Colors.BLUE)
+                alpha = 0.5
+
+            # filtered by color
+            elif bbox_props['sufficient_matches'] and bbox_props['valid_shape'] and not (bbox_props['valid_color']) and 2 in d:
+                ann_color = 'k'
+                facecolor = rgb_to_hex(Colors.YELLOW)
+                alpha = 0.5
+
+            #do not annotate if neither condition is satisfied
+            else:
+                continue
+
+        ax.annotate(ann, center-np.array([a, 0]), color=ann_color, fontweight='bold', alpha = 0.8, fontsize=10, bbox={'facecolor': facecolor, 'alpha': alpha, 'boxstyle': 'round'})
 
 
 def visualize_detections(im_scene,
@@ -314,33 +393,38 @@ def visualize_detections(im_scene,
                          annotation_offset=30,
                          show_matches=False,
                          ax = None,
-                         axes_off = False):
-    '''Visualize the detected models with annotated bounding boxes on the scene images.
+                         axes_off = False,
+                         fill_bbox = True):
+    '''
+    Visualize the detected models with annotated bounding boxes on the scene images.
 
     Parameters
     ----------
     im_scene: array
-        scene image
+        Scene image
     bbox_props_list:
-        list containing the properties of the bounding boxes of the scene image
-    draw_invalid_bbox: int, default 0
-        possible values:
-            0: draw only valid bounding boxes (green, labeled)
-            1: draw also bounding boxes filtered by overlap (blue, labeled)
-            2: draw also bounding boxes filtered by shape and color (orange, unlabeled)
-            3: draw all bounding boxes (red, unlabeled).
+        List containing the properties of the bounding boxes of the scene image
+    draw_invalid_bbox: int or tuple of int, default 0
+        Flag on which bounding boxes to draw. Possible values:
+            0: valid bounding boxes (green, labeled)
+            1: bounding boxes filtered by overlap (blue, labeled)
+            2: bounding boxes filtered by color (yellow, labeled)
+            3: bounding boxes filtered by geometry (orange, unlabeled)
+            4: bounding boxes filtered by match number (red, unlabeled).
+            5: draw all bounding boxes
     plot_height: int, optional
-        plot height in pixels. If not given, the plot will have the same size as the scene image.
+        Plot height in pixels. If not given, the plot will have the same size as the scene image.
     annotate: bool, default True
-        display filenames of the scene and model images.
+        Display filenames of the scene and model images.
     annotation_offset: int, default 30
-        offset in pixels of the annotation of the model filename onto the homography.
+        Offset in pixels of the label of the bounding box.
     show_matches: bool, default False
-        print match number alongside model name
+        Print match number alongside model name
     ax: ``matplotlib.axes._subplots.AxesSubplot``, optional
-        the axes on which to show the plot
+        The axes on which to show the plot
     axes_off: bool, default False
-        toggles axes ticks on plot
+        Toggles axes ticks on plot
+    fill_bbox: bool, default True
 
     Returns
     -------
@@ -350,8 +434,11 @@ def visualize_detections(im_scene,
     if ``ax`` is provided:
     ``matplotlib.axes._subplots.AxesSubplot``
     '''
-
     d = draw_invalid_bbox
+    if not type(d) is tuple:
+        d = (d,)
+    if 5 in d:
+        d = (0,1,2,3,4)
 
     create_axes = ax==None
 
@@ -376,55 +463,53 @@ def visualize_detections(im_scene,
     for bbox_props in bbox_props_list:
 
         bbox = bbox_props['corners']
+        to_fill = True
 
+        # valid bboxes
         if bbox_props['valid_bbox']:
-            # fill bounding box
-            im1 = cv2.fillPoly(im1, [np.int32(bbox)], Colors.GREEN, cv2.LINE_8)
-            im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, Colors.GREEN, 15, cv2.FILLED)
-
+            if not 0 in d:
+                continue
+            color = Colors.GREEN
         else:
-            if bbox_props['sufficient_matches'] and bbox_props['valid_color'] and bbox_props['valid_shape'] and d>=1:
-                im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, Colors.BLUE, 10, cv2.FILLED)
+            # filtered by overlap
+            if bbox_props['sufficient_matches'] and bbox_props['valid_shape'] and bbox_props['valid_color'] and 1 in d:
+                color = Colors.BLUE
 
-            # distorted bounding box with high number of matches
-            if bbox_props['sufficient_matches'] and not (bbox_props['valid_shape'] or bbox_props['valid_color']) and d>=2:
-                im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, Colors.ORANGE, 10, cv2.FILLED)
+            # filtered by color
+            elif bbox_props['sufficient_matches'] and bbox_props['valid_shape'] and not (bbox_props['valid_color']) and 2 in d:
+                color = Colors.YELLOW
 
-            # bounding box with low number of matches
-            if not bbox_props['sufficient_matches'] and d==3:
-                im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, Colors.RED, 10, cv2.FILLED)
+            # filtered by shape
+            elif bbox_props['sufficient_matches'] and not (bbox_props['valid_shape'] or bbox_props['valid_color']) and 3 in d:
+                color = Colors.ORANGE
+                to_fill = False
 
+            # filtered by match number
+            elif not bbox_props['sufficient_matches'] and 4 in d:
+                color = Colors.RED
+                to_fill = False
+
+            #do not draw if neither condition is satisfied
+            else:
+                continue
+
+        im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, color, 10, cv2.FILLED)
+        if to_fill:
+            im1 = cv2.fillPoly(im1, [np.int32(bbox)], color, cv2.LINE_8)
+    
     # display scene image
     ax.imshow(im_scene)
-    ax.imshow(im1, alpha=0.3)
+    if fill_bbox:
+        ax.imshow(im1, alpha=0.3)
 
     if annotate:
-        # put annotations for model filenames
-        for bbox_props in bbox_props_list:
-            if not (bbox_props['sufficient_matches'] and bbox_props['valid_color'] and bbox_props['valid_shape']): continue
-            #if not bbox_props['valid_bbox']: continue
-            model_name = bbox_props['model'].split('.')[0]
-            match_number = bbox_props['match_number']
-            center = bbox_props['center']
+        annotate_bboxes(ax, bbox_props_list, annotation_offset, show_matches, d)
 
-            a = annotation_offset
-            if show_matches:
-                ann = f"{model_name}: {match_number} m."
-            else:
-                ann = model_name
-
-            ann_color = 'k'
-            if not bbox_props['valid_bbox']:
-                if d>=1:
-                    ann_color = 'r'
-                else:
-                    continue
-            ax.annotate(ann, center-np.array([a, 0]), color=ann_color, fontweight='bold', fontsize=10)
     if axes_off:
         ax.set_axis_off()
     
     if create_axes:
-        fig.tight_layout(pad=1.5)
+        fig.tight_layout(pad=0.5)
         return fig, ax
     
     return ax
@@ -460,5 +545,5 @@ def print_detections(bbox_props):
             print(f'\tProduct {model_name} - {counter} instance found:')
             for k, pos in enumerate(positions):
                 print(
-                    f"\t\tInstance  {k + 1} (position: ({pos['c'][0]:.0f}, {pos['c'][1]:.0f}), width: {pos['w']:.0f}px, height: {pos['h']:.0f}px)")
+                    f"\t\tInstance {k + 1}: (position: ({pos['c'][0]:.0f}, {pos['c'][1]:.0f}), width: {pos['w']:.0f}px, height: {pos['h']:.0f}px)")
                 
