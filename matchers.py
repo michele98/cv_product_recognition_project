@@ -233,7 +233,8 @@ class MultipleInstanceMatcher(FeatureMatcher):
     def _find_accumulator_peaks(self):
 
         x = self._acc_bin.flatten()
-
+        if self._peaks_kw['distance'] == 0:
+            self._peaks_kw['distance'] = 1
         peaks_1d, _ = find_peaks(x, **self._peaks_kw)
 
         peaks = np.vstack(np.unravel_index(peaks_1d, self._acc_bin.shape))*self._K
