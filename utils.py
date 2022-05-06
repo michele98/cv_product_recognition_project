@@ -171,10 +171,12 @@ def find_matcher_matrix(im_scene_list, im_model_list, multiple_instances=True, K
             if multiple_instances:
                 matcher = MultipleInstanceMatcher(im_model, im_scene)
                 matcher.set_K(K)
-                matcher.set_peaks_kw(**peaks_kw)
+                if len(peaks_kw)!=0:
+                    matcher.set_peaks_kw(**peaks_kw)
             else:
                 matcher = FeatureMatcher(im_model, im_scene)
-            matcher.set_homography_parameters(**homography_kw)
+            if len(homography_kw)!=0:
+                matcher.set_homography_parameters(**homography_kw)
             # set the previously computed descriptors and keypoints for performance reasons
             matcher.set_descriptors_1(kp_model, des_model)
             matcher.set_descriptors_2(kp_scene, des_scene)
