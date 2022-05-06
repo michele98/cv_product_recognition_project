@@ -1,4 +1,5 @@
 from audioop import avg
+from traceback import print_tb
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
@@ -73,7 +74,19 @@ def color_distance(im1, im2):
 
 
 def get_bbox_edges(bbox):
+    '''
+    Return edges of the bounding box in this order: top, right, down, left.
+    
+    Parameters
+    ----------
+    bbox : array
+        bounding box, constituted of an array of shape (n_corners, 1, 2).
 
+    Returns
+    -------
+    l1, l2, l3, l4 : float
+        edges of the bounding box.
+    '''
     l1 = np.linalg.norm(bbox[0] - bbox[1])
     l2 = np.linalg.norm(bbox[1] - bbox[2])
     l3 = np.linalg.norm(bbox[2] - bbox[3])
@@ -83,14 +96,27 @@ def get_bbox_edges(bbox):
 
 
 def get_bbox_diagonals(bbox):
+    '''
+    Return diagonals of the bounding box in this order: max diagonal and min diagonal.
+    
+    Parameters
+    ----------
+    bbox : array
+        bounding box, constituted of an array of shape (n_corners, 1, 2).
+
+    Returns
+    -------
+    d1, d2 : float
+        diagonals of the bounding box.
+    '''
 
     d1 = np.linalg.norm(bbox[0] - bbox[2])
     d2 = np.linalg.norm(bbox[1] - bbox[3])
 
-    return d1, d2
+    return max(d1, d2), min(d1, d2)
 
 
-def valid_bbox(bbox, edges_ratio=4, diag_ratio=2):
+def valid_bbox(bbox, max_distortion=1.4):
     '''
     Perform geometric filtering of a bounding box.
 
@@ -98,32 +124,29 @@ def valid_bbox(bbox, edges_ratio=4, diag_ratio=2):
     ----------
     bbox : array
         bounding box, constituted of an array of shape (n_corners, 1, 2).
-    edges_ratio : float, default 4 
-        edge distortion parameter: measures the threshold for the ratio between the mean of opposing edges and their standard deviation.
-    diag_ratio : float, default 2
-        diagonal distortion parameter: measures the threshold for the ratio between the mean of the diagonals and their standard deviation.
-
+    max_distortion : float, default 4 
+        distortion parameter: measures the threshold for the ratio between the opposing edges and the ratio between the diagonals.
+   
     Returns
     -------
     bool
         weather the shape of the bounding box is valid according to the given distortion parameters.
     '''
+    p1 = Polygon(np.asarray(bbox)[:, 0, :])
+    if not p1.is_valid:
+        return False
+    
     # edges
     l1, l2, l3, l4 = get_bbox_edges(bbox)
-
     # diagonals
     d1, d2 = get_bbox_diagonals(bbox)
 
-    vert = [l1, l3]
-    hor = [l2, l4]
-    edges = [l1, l2, l3, l4]
-    diagonals = [d1, d2]
+    valid_diagonal = d1 / d2 <= max_distortion
+    valid_edges1 = max(l1, l3) / min(l1, l3) <= max_distortion
+    valid_edges2 = max(l2, l4) / min(l2, l4) <= max_distortion
 
-    # first part takes care of crossing, second part of excessive distortion
-    return (np.mean(diagonals) >= np.mean(edges) and
-            edges_ratio*np.std(hor) <= np.mean(hor) and
-            edges_ratio*np.std(vert) <= np.mean(vert) and
-            diag_ratio*np.std(diagonals) <= np.mean(diagonals))
+    return valid_diagonal and valid_edges1 and valid_edges2
+
 
 
 def find_matcher_matrix(im_scene_list, im_model_list, multiple_instances=True, K=15, peaks_kw={}, homography_kw={}):
@@ -186,7 +209,7 @@ def find_matcher_matrix(im_scene_list, im_model_list, multiple_instances=True, K
     return matcher_matrix
 
 
-def find_bboxes(matcher_list, model_labels=None, min_match_threshold=15, max_distortion=4, color_distance_threshold=5, bbox_overlap_threshold=0.8):
+def find_bboxes(matcher_list, model_labels=None, min_match_threshold=15, max_distortion=1.4, color_distance_threshold=5, bbox_overlap_threshold=0.8):
     '''
     Filter valid bounding boxes.
 
@@ -199,7 +222,7 @@ def find_bboxes(matcher_list, model_labels=None, min_match_threshold=15, max_dis
     min_match_threshold : int, default 15
         Minimum number of matches to consider a bounding box as valid.
     max_distortion : int, default 4
-        Aaximum distortion parameter as defined in ``valid_bbox`` to consider a bounding box as valid.
+        Maximum distortion parameter as defined in ``valid_bbox`` to consider a bounding box as valid.
     color_distance_threshold : float, default 5
         Average color distance in HSV space to filter false positive bounding boxes.
     bbox_overlap_threshold : float, default 0.8
@@ -260,7 +283,7 @@ def find_bboxes(matcher_list, model_labels=None, min_match_threshold=15, max_dis
             bbox = cv2.perspectiveTransform(pts, M)
 
             high_kp = used_kp >= min_match_threshold
-            valid_shape = valid_bbox(bbox, max_distortion, max_distortion/2)
+            valid_shape = valid_bbox(bbox, max_distortion)
             avg_color_distance = color_distance(im_model, crop_scene(im_scene, bbox))
             valid_color = avg_color_distance <= color_distance_threshold
             center = cv2.perspectiveTransform(np.float32([[[w//2, h//2]]]), M).ravel()
