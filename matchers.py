@@ -139,7 +139,7 @@ class MultipleInstanceMatcher(FeatureMatcher):
     def __init__(self, im1, im2, K = 15, min_cluster_threshold = 0):
         super().__init__(im1, im2)
         self._K = K
-        self._peaks_kw['distance'] = 0.2*im2.shape[1]*im2.shape[0]/K**2
+        self._peaks_kw['distance'] = 1
         self._min_cluster_threshold = min_cluster_threshold
     
     def find_matches(self, force=False):
