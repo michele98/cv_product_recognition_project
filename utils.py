@@ -495,9 +495,9 @@ def visualize_detections(im_scene,
             else:
                 continue
 
-        im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, color, 10, cv2.FILLED)
+        im_scene = cv2.polylines(im_scene, [np.int32(bbox)], True, color, 10, cv2.LINE_AA)
         if to_fill:
-            im1 = cv2.fillPoly(im1, [np.int32(bbox)], color, cv2.LINE_8)
+            im1 = cv2.fillPoly(im1, [np.int32(bbox)], color, cv2.LINE_AA)
     
     # display scene image
     ax.imshow(im_scene)
