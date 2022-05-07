@@ -2,9 +2,11 @@ import numpy as np
 import cv2
 from scipy.signal import find_peaks
 
-# Used to compute the matches between two images using local invariant features
+
 class FeatureMatcher():
-    
+    '''
+    Used to compute the matches between two images using local invariant features.
+    '''
     # Attributes
     # Attributes ending with 1 refer to models while those ending with 2 refer to scenes
     _computed = False
@@ -128,10 +130,12 @@ class FeatureMatcher():
             if not homography is None:
                 self._homography = homography
                 self._homography_mask = homography_mask
-        
+
 
 class MultipleInstanceMatcher(FeatureMatcher):
-
+    '''
+    Used to compute the matches between two images using local invariant features and Generalized Hough Transform.
+    '''
     _peaks_kw = {'height': 0.3}
     _homographies = [np.eye(3, dtype = np.float32)]
     _used_kp = [0]
@@ -287,3 +291,63 @@ class MultipleInstanceMatcher(FeatureMatcher):
         #print(f'Found {len(homographies)} homographies')
         self._homographies = homographies
         self._used_kp = used_kp
+
+
+def find_matcher_matrix(im_scene_list, im_model_list, multiple_instances=True, K=15, peaks_kw={}, homography_kw={}):
+    '''
+    Compute the matrix of ``matcher.FeatureMatcher`` between each scene image and model image
+
+    Parameters
+    ----------
+    im_scene_list : array or array-like
+        list of scene images
+    im_model_list : array or array-like
+        list of model images
+    multiple_instances : bool, default True
+        find single or multiple instances of each model in each scene
+    K : int, default 15
+        binning dimension in pixel of the accumulator array for the barycenter votes in the GHT.
+        The minimum value is 1. Used only if ``multiple_instances`` is set to True.
+    peaks_kw : dict
+        keyword arguments passed to ``scipy.find_peaks`` for finding the peaks in the GHT accumulator.
+        Used only if ``multiple_instances`` is set to True.
+    homography_kw : dict
+        keyword arguments passed to ``matcher.FeatureMatcher.set_homography_parameters``.
+
+    Returns
+    -------
+    matcher_matrix : array of ``matcher.FeatureMatcher`` or ``matcher.MultipleInstacneMatcher``
+        the shape is (n_scenes, n_models).
+        If ``multiple_instances`` is set to False, the type of the array elements is ``matcher.FeatureMatcher``
+        If ``multiple_instances`` is set to True, the type of the array elements is ``matcher.MultipleInstacneMatcher``
+    '''
+    # Find salient points of the images and corresponding descriptors
+    sift = cv2.xfeatures2d.SIFT_create()
+    kp_scene_list, des_scene_list = sift.compute(
+        im_scene_list, sift.detect(im_scene_list))
+    kp_model_list, des_model_list = sift.compute(
+        im_model_list, sift.detect(im_model_list))
+
+    # The matrix is instantiated
+    matcher_matrix = np.zeros(
+        (len(im_scene_list), len(im_model_list)), dtype=object)
+
+    # The matrix is populated with matches
+    for i, (im_scene, kp_scene, des_scene) in enumerate(zip(im_scene_list, kp_scene_list, des_scene_list)):
+        for j, (im_model, kp_model, des_model) in enumerate(zip(im_model_list, kp_model_list, des_model_list)):
+            if multiple_instances:
+                matcher = MultipleInstanceMatcher(im_model, im_scene)
+                matcher.set_K(K)
+                if len(peaks_kw)!=0:
+                    matcher.set_peaks_kw(**peaks_kw)
+            else:
+                matcher = FeatureMatcher(im_model, im_scene)
+            if len(homography_kw)!=0:
+                matcher.set_homography_parameters(**homography_kw)
+            # set the previously computed descriptors and keypoints for performance reasons
+            matcher.set_descriptors_1(kp_model, des_model)
+            matcher.set_descriptors_2(kp_scene, des_scene)
+            matcher.find_matches()
+            matcher_matrix[i][j] = matcher
+
+    return matcher_matrix
