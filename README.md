@@ -6,6 +6,7 @@ The following packages are needed:
  - ``matplotlib``
  - ``scipy``
  - ``numpy``
+ - ``shapely``
 
 Create the folder ``images/results`` to save the output images.
 
