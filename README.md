@@ -16,7 +16,7 @@ The two class ``FeatureMatcher`` and ``MultipleInstanceMatcher``, contained in `
 
 ## Report
 
-You can read and download our report [here](./report/product-recognition-on-store-shelves.pdf).
+You can read and download our report [here](./report/cv_report.pdf).
 
 ## Result
 
