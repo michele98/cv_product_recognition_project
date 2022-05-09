@@ -18,6 +18,8 @@ The two class ``FeatureMatcher`` and ``MultipleInstanceMatcher``, contained in `
 
 You can read and download our report [here](./report/cv_report.pdf).
 
+You can read the project assignment [here](./report/product-recognition-on-store-shelves.pdf).
+
 ## Result
 
 ### Step A - Single Product Detection
