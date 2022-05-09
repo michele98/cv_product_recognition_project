@@ -194,7 +194,7 @@ def find_bboxes(matcher_list, model_labels=None, min_match_threshold=15, max_dis
         list of labels of the model images, used for representing output.
     min_match_threshold : int, default 15
         Minimum number of matches to consider a bounding box as valid.
-    max_distortion : int, default 4
+    max_distortion : int, default 1.4
         Maximum distortion parameter as defined in ``valid_bbox_shape`` to consider a bounding box as valid.
     color_distance_threshold : float, default 5
         Average color distance in HSV space to filter false positive bounding boxes.
