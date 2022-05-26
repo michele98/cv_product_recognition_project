@@ -176,7 +176,7 @@ def filter_overlap(bbox_props_list, bbox_overlap_threshold=0.8):
 
             if overlap <= bbox_overlap_threshold: continue
 
-            if bbox_props_list[i]['match_number'] > bbox_props_list[j]['match_number'] : 
+            if bbox_props_list[i]['match_number'] >= bbox_props_list[j]['match_number'] : 
                 bbox_props_list[j]['valid_bbox'] = False
 
     return bbox_props_list
