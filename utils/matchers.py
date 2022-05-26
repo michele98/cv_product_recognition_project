@@ -109,8 +109,8 @@ class FeatureMatcher():
              'trees': 5},
             {'checks': 50})
         
-        #compute the best 2 matches for each salient point in the query image
-        matches = flann.knnMatch(self._des1, self._des2, k=2)
+        #compute the best 2 matches for each salient point in the second image
+        matches = flann.knnMatch(self._des2, self._des1, k=2)
         d = self._homography_parameters['match_distance_threshold']
         #if the distance between the best matches is less than d times the distance from the second best matches, keep the match
         #otherwise it is probably a false match that needs to be discarded
@@ -120,8 +120,8 @@ class FeatureMatcher():
         self._computed = True
     
     def _find_homography(self):
-        src_pts = np.float32([self._kp1[m.queryIdx].pt for m in self._matches])
-        dst_pts = np.float32([self._kp2[m.trainIdx].pt for m in self._matches])
+        src_pts = np.float32([self._kp1[m.trainIdx].pt for m in self._matches])
+        dst_pts = np.float32([self._kp2[m.queryIdx].pt for m in self._matches])
 
         reproj_th = self._homography_parameters['ransacReprojThreshold']
 
@@ -177,8 +177,8 @@ class MultipleInstanceMatcher(FeatureMatcher):
     def _calculate_r_vectors(self):
 
         #filter keypoints that match
-        kp_model = [self._kp1[i] for i in [m.queryIdx for m in self._matches]]
-        kp_scene = [self._kp2[i] for i in [m.trainIdx for m in self._matches]]
+        kp_model = [self._kp1[i] for i in [m.trainIdx for m in self._matches]]
+        kp_scene = [self._kp2[i] for i in [m.queryIdx for m in self._matches]]
 
         #calculate r vectors for the model image
         self._kp_model_pos = np.asarray([k.pt for k in kp_model])
